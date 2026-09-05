@@ -1026,7 +1026,7 @@ function RouteModal({ customers, onClose, onSave }) {
     <ModalOverlay onClose={onClose}>
       <div style={styles.modalTitle}>Looproute aanpassen</div>
       <div style={styles.formNote}>
-        Zet de klanten in de volgorde waarin je zoon ze onderweg tegenkomt. De app toont daarna vanzelf wie de volgende is.
+        Zet de klanten in de volgorde waarin je ze onderweg tegenkomt. De app toont daarna vanzelf wie de volgende is.
         {order.length > 20 && " Zoek een adres op en gebruik \u201cbovenaan/onderaan\u201d om het snel te verplaatsen."}
       </div>
       <div style={styles.searchRow}>
