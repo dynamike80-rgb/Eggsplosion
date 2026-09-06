@@ -3,7 +3,7 @@ import {
   ShoppingBag, Users, Package, Plus, X, Check, Search,
   MessageCircle, Trash2, Pencil, ChevronRight, TrendingUp,
   MinusCircle, PlusCircle, Upload, Download, ArrowUp, ArrowDown,
-  Route, CircleCheck, BarChart3, Gift, Heart, Star
+  Route, CircleCheck, BarChart3, Gift, Heart, Star, Send
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -78,15 +78,36 @@ function isOnVacation(c) {
 }
 
 /* ---------- WhatsApp templates ---------- */
+function greet(naam) {
+  return naam ? `Hoi familie ${naam}` : "Hoi";
+}
+
+function vakantieBericht(naam, start, end) {
+  const fmt = (d) => new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "long" });
+  let periode = "";
+  if (start && end) periode = ` van ${fmt(start)} tot ${fmt(end)}`;
+  else if (start) periode = ` vanaf ${fmt(start)}`;
+  else if (end) periode = ` tot ${fmt(end)}`;
+  return `${greet(naam)}, ik ben${periode} afwezig, dus dan kom ik niet langs met eieren. Daarna weer gewoon!`;
+}
+
+function weerBericht(naam, opmerking) {
+  return `${greet(naam)}, door het weer: ${opmerking || "ik kom vandaag op een ander tijdstip of een andere dag langs"}. Tot dan!`;
+}
+
 const WA_TEMPLATES = {
-  bestelling: (naam) =>
-    `Hoi${naam ? " " + naam : ""}! Wil je deze week weer eieren? Laat even weten hoeveel, dan kom ik langs.`,
-  vakantie: (naam) =>
-    `Hoi${naam ? " " + naam : ""}, ik ben de komende week op vakantie, dus dan kom ik niet langs met eieren. Erna weer gewoon!`,
   herinnering: (naam) =>
-    `Hoi${naam ? " " + naam : ""}, ik kom vandaag/morgen weer langs met verse eieren!`,
-  bedankje: (naam) =>
-    `Hoi${naam ? " " + naam : ""}, ik wilde je even bedanken voor je fooi de laatste tijd — heel lief van je!`,
+    `${greet(naam)}, ik kom morgen (vrijdag) weer langs met verse eieren! Laat het weten door op dit bericht te reageren als er iets bijzonders is, bijvoorbeeld niet thuis of een grote bestelling.`,
+  bedankjeVerkoop: (naam) =>
+    `${greet(naam)}, ik ben ei-genlijk best blij met jou als klant. Bedankt voor de bestelling en tot volgende keer! 🥚`,
+  bedankjeFooi: (naam) =>
+    `${greet(naam)}, ik wilde je even bedanken voor je fooi de laatste tijd — heel lief van je!`,
+};
+
+const WA_TEMPLATE_LABELS = {
+  herinnering: "Herinnering (morgen langs)",
+  bedankjeVerkoop: "Bedankje na verkoop",
+  bedankjeFooi: "Bedankje voor fooi",
 };
 
 function waLink(phone, text) {
@@ -323,6 +344,9 @@ export default function EggsplosionApp() {
             }}
           />
         )}
+        {tab === "berichten" && (
+          <BerichtenTab customers={customers} settings={settings} onUpdateSettings={(s) => persist("settings", s, setSettings)} />
+        )}
         {tab === "stats" && (
           <StatsTab customers={customers} sales={sales} purchases={purchases} extras={extras} />
         )}
@@ -417,6 +441,7 @@ function TabBar({ tab, setTab }) {
     { id: "verkoop", label: "Verkoop", icon: ShoppingBag },
     { id: "klanten", label: "Klanten", icon: Users },
     { id: "voorraad", label: "Voorraad", icon: Package },
+    { id: "berichten", label: "Berichten", icon: Send },
     { id: "stats", label: "Stats", icon: BarChart3 },
   ];
   return (
@@ -624,10 +649,7 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
           customer={activeCustomer === "adhoc" ? null : activeCustomer}
           settings={settings}
           onClose={() => setActiveCustomer(null)}
-          onConfirm={(sale) => {
-            onLogSale(sale);
-            setActiveCustomer(null);
-          }}
+          onLogSale={(sale) => onLogSale(sale)}
         />
       )}
 
@@ -644,13 +666,14 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
   );
 }
 
-function SaleModal({ customer, settings, onClose, onConfirm }) {
+function SaleModal({ customer, settings, onClose, onLogSale }) {
   const [count, setCount] = useState(6);
   const [amount, setAmount] = useState((6 * settings.pricePerEgg).toFixed(2));
   const [amountTouched, setAmountTouched] = useState(false);
   const [showTip, setShowTip] = useState(false);
   const [tip, setTip] = useState("");
   const [celebrating, setCelebrating] = useState(false);
+  const [showThanks, setShowThanks] = useState(false);
 
   useEffect(() => {
     if (!amountTouched) setAmount((count * settings.pricePerEgg).toFixed(2));
@@ -670,7 +693,34 @@ function SaleModal({ customer, settings, onClose, onConfirm }) {
       ts: Date.now(),
     };
     setCelebrating(true);
-    setTimeout(() => onConfirm(sale), 750);
+    setTimeout(() => {
+      onLogSale(sale);
+      if (customer?.phone) setShowThanks(true);
+      else onClose();
+    }, 750);
+  }
+
+  if (showThanks) {
+    return (
+      <ModalOverlay onClose={onClose}>
+        <div style={styles.celebrateBox}>
+          <EggMascot size={70} />
+          <div style={{ fontWeight: 700, fontSize: 15, marginTop: 8, marginBottom: 14 }}>
+            Verkoop gelogd! Nog een bedankje sturen?
+          </div>
+          <a
+            href={waLink(customer.phone, WA_TEMPLATES.bedankjeVerkoop(customer.name))}
+            target="_blank"
+            rel="noreferrer"
+            style={styles.confirmBtn}
+            onClick={onClose}
+          >
+            <MessageCircle size={16} /> Bedankje sturen
+          </a>
+          <button style={styles.cancelLink} onClick={onClose}>Nee, klaar</button>
+        </div>
+      </ModalOverlay>
+    );
   }
 
   if (celebrating) {
@@ -997,7 +1047,7 @@ function KlantenTab({ customers, onAdd, onAddMany, onUpdate, onDelete, onReorder
             >
               <MessageCircle size={16} color={T.yolkDeep} />
               <div>
-                <div style={{ fontWeight: 700, textTransform: "capitalize" }}>{key}</div>
+                <div style={{ fontWeight: 700 }}>{WA_TEMPLATE_LABELS[key] || key}</div>
                 <div style={{ fontSize: 12.5, color: T.inkSoft }}>{fn(waFor.name)}</div>
               </div>
             </a>
@@ -1448,6 +1498,59 @@ function EditPurchaseModal({ purchase, onClose, onSave, onDelete }) {
   );
 }
 
+function BulkSendModal({ title, note, needsCustomText, customPlaceholder, buildMessage, customers, onClose }) {
+  const [customText, setCustomText] = useState("");
+  const eligible = useMemo(
+    () => customers.filter((c) => c.phone && c.status !== "geen_interesse" && !isOnVacation(c)),
+    [customers]
+  );
+  const skippedCount = customers.filter((c) => c.status !== "geen_interesse" && !isOnVacation(c)).length - eligible.length;
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div style={styles.modalTitle}>{title}</div>
+      {note && <div style={styles.formNote}>{note}</div>}
+      {needsCustomText && (
+        <FormField
+          label="Opmerking (verschijnt in het bericht)"
+          value={customText}
+          onChange={(e) => setCustomText(e.target.value)}
+          placeholder={customPlaceholder}
+        />
+      )}
+      <div style={{ ...styles.formNote, background: T.cream }}>
+        {eligible.length} klant{eligible.length === 1 ? "" : "en"} met telefoonnummer.
+        {skippedCount > 0 && ` ${skippedCount} overgeslagen (geen nummer of op vakantie).`}
+        {" "}Tik per klant op "Verstuur" — WhatsApp opent dan met het bericht klaar, jij verstuurt het zelf.
+      </div>
+      {eligible.length === 0 ? (
+        <EmptyState title="Niemand om naar te sturen" text="Voeg telefoonnummers toe bij klanten om deze functie te gebruiken." />
+      ) : (
+        <div style={styles.list}>
+          {eligible.map((c) => (
+            <div key={c.id} style={styles.row}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={styles.rowTitle}>{c.name || `${c.street} ${c.houseNumber}`}</div>
+                <div style={styles.rowSub}>{c.phone}</div>
+              </div>
+              <a
+                href={waLink(c.phone, buildMessage(c, customText))}
+                target="_blank"
+                rel="noreferrer"
+                style={styles.saleBtn}
+              >
+                Verstuur
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+      <button style={styles.cancelLink} onClick={onClose}>Sluiten</button>
+    </ModalOverlay>
+  );
+}
+
+
 function DeleteConfirmButton({ onDelete, label }) {
   const [confirming, setConfirming] = useState(false);
   if (!confirming) {
@@ -1587,6 +1690,107 @@ function PurchaseModal({ onClose, onConfirm }) {
       </button>
       <button style={styles.cancelLink} onClick={onClose}>Annuleren</button>
     </ModalOverlay>
+  );
+}
+
+/* ---------- Berichten tab ---------- */
+function BerichtenTab({ customers, settings, onUpdateSettings }) {
+  const [absenceStart, setAbsenceStart] = useState(settings.absenceStart || "");
+  const [absenceEnd, setAbsenceEnd] = useState(settings.absenceEnd || "");
+  const [bulkModal, setBulkModal] = useState(null); // "herinnering" | "afwezigheid" | "weer"
+
+  const isThursdayAfternoon = useMemo(() => {
+    const now = new Date();
+    return now.getDay() === 4 && now.getHours() >= 12;
+  }, []);
+
+  return (
+    <div>
+      {isThursdayAfternoon && (
+        <div style={styles.thursdayBanner}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>Het is donderdagmiddag 🥚</div>
+            <div style={{ fontSize: 12, color: T.inkSoft }}>Goed moment om de herinnering te versturen.</div>
+          </div>
+          <button style={styles.smallBtn} onClick={() => setBulkModal("herinnering")}>Versturen</button>
+        </div>
+      )}
+
+      <div style={styles.sectionLabel}>
+        <Send size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+        Berichten naar alle klanten
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+        <button style={styles.secondaryBtnGhost2} onClick={() => setBulkModal("herinnering")}>
+          Stuur herinnering (morgen langs)
+        </button>
+        <button
+          style={{ ...styles.secondaryBtnGhost2, opacity: settings.absenceStart || settings.absenceEnd ? 1 : 0.5 }}
+          onClick={() => (settings.absenceStart || settings.absenceEnd) && setBulkModal("afwezigheid")}
+        >
+          Stuur afwezigheidsbericht
+        </button>
+        <button style={styles.secondaryBtnGhost2} onClick={() => setBulkModal("weer")}>
+          Stuur weerbericht
+        </button>
+      </div>
+
+      <div style={styles.settingsRow}>
+        <label style={styles.fieldLabel}>Eigen afwezigheid (voor het afwezigheidsbericht)</label>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <input type="date" value={absenceStart} onChange={(e) => setAbsenceStart(e.target.value)} style={{ ...styles.fieldInput, flex: 1 }} />
+          <input type="date" value={absenceEnd} onChange={(e) => setAbsenceEnd(e.target.value)} style={{ ...styles.fieldInput, flex: 1 }} />
+        </div>
+        <button
+          style={styles.smallBtn}
+          onClick={() => onUpdateSettings({ ...settings, absenceStart, absenceEnd })}
+        >
+          Opslaan
+        </button>
+      </div>
+
+      <div style={styles.sectionLabel}>Sjablonen</div>
+      <div style={styles.list}>
+        {Object.entries(WA_TEMPLATE_LABELS).map(([key, label]) => (
+          <div key={key} style={styles.row}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={styles.rowTitle}>{label}</div>
+              <div style={styles.rowSub}>{WA_TEMPLATES[key]("...")}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {bulkModal === "herinnering" && (
+        <BulkSendModal
+          title="Herinnering versturen"
+          note="Ga morgen (vrijdag) weer langs? Stuur dit naar iedereen die je gewend bent te bezoeken."
+          buildMessage={(c) => WA_TEMPLATES.herinnering(c.name)}
+          customers={customers}
+          onClose={() => setBulkModal(null)}
+        />
+      )}
+      {bulkModal === "afwezigheid" && (
+        <BulkSendModal
+          title="Afwezigheidsbericht versturen"
+          note="Gebruikt de afwezigheidsdatum die je hierboven hebt ingesteld."
+          buildMessage={(c) => vakantieBericht(c.name, settings.absenceStart, settings.absenceEnd)}
+          customers={customers}
+          onClose={() => setBulkModal(null)}
+        />
+      )}
+      {bulkModal === "weer" && (
+        <BulkSendModal
+          title="Weerbericht versturen"
+          note="Bijvoorbeeld bij storm of noodweer: laat weten dat je later, eerder of een andere dag komt."
+          needsCustomText
+          customPlaceholder="bijv. ik kom vandaag pas na 17:00 langs"
+          buildMessage={(c, text) => weerBericht(c.name, text)}
+          customers={customers}
+          onClose={() => setBulkModal(null)}
+        />
+      )}
+    </div>
   );
 }
 
@@ -1740,7 +1944,7 @@ function StatsTab({ customers, sales, purchases, extras }) {
         <ModalOverlay onClose={() => setWaFor(null)}>
           <div style={styles.modalTitle}>Bedankje naar {waFor.name || "klant"}</div>
           <a
-            href={waLink(waFor.phone, WA_TEMPLATES.bedankje(waFor.name))}
+            href={waLink(waFor.phone, WA_TEMPLATES.bedankjeFooi(waFor.name))}
             target="_blank"
             rel="noreferrer"
             style={styles.waOption}
@@ -1749,7 +1953,7 @@ function StatsTab({ customers, sales, purchases, extras }) {
             <Gift size={16} color={T.yolkDeep} />
             <div>
               <div style={{ fontWeight: 700 }}>Bedankje</div>
-              <div style={{ fontSize: 12.5, color: T.inkSoft }}>{WA_TEMPLATES.bedankje(waFor.name)}</div>
+              <div style={{ fontSize: 12.5, color: T.inkSoft }}>{WA_TEMPLATES.bedankjeFooi(waFor.name)}</div>
             </div>
           </a>
           <button style={styles.cancelLink} onClick={() => setWaFor(null)}>Annuleren</button>
@@ -2050,6 +2254,11 @@ const styles = {
   visitedBadge: {
     display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, fontWeight: 700,
     borderRadius: 999, padding: "2px 8px", background: T.greenSoft || "#EFEAE0", color: T.inkSoft,
+  },
+  thursdayBanner: {
+    display: "flex", alignItems: "center", gap: 8,
+    background: T.yolkPale, border: `1.5px solid ${T.yolk}`, borderRadius: 14,
+    padding: "10px 12px", marginBottom: 14,
   },
   nextCard: {
     background: `linear-gradient(135deg, ${T.headerFrom} 0%, ${T.headerTo} 100%)`,
