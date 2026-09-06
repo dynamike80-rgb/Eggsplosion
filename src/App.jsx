@@ -71,6 +71,12 @@ function formatDateTime(ts) {
   return new Date(ts).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+function isOnVacation(c) {
+  if (!c.vacationStart || !c.vacationEnd) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return today >= c.vacationStart && today <= c.vacationEnd;
+}
+
 /* ---------- WhatsApp templates ---------- */
 const WA_TEMPLATES = {
   bestelling: (naam) =>
@@ -464,8 +470,20 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
     return new Set(sales.filter((s) => s.ts >= start.getTime() && s.customerId).map((s) => s.customerId));
   }, [sales]);
 
+  const lastSaleByCustomer = useMemo(() => {
+    const map = {};
+    sales.forEach((s) => {
+      if (!s.customerId) return;
+      if (!map[s.customerId] || s.ts > map[s.customerId].ts) map[s.customerId] = s;
+    });
+    return map;
+  }, [sales]);
+
   const nextCustomer = useMemo(
-    () => [...eligible].sort((a, b) => (a.routeOrder ?? 9999) - (b.routeOrder ?? 9999)).find((c) => !soldTodayIds.has(c.id)),
+    () =>
+      [...eligible]
+        .sort((a, b) => (a.routeOrder ?? 9999) - (b.routeOrder ?? 9999))
+        .find((c) => !soldTodayIds.has(c.id) && !isOnVacation(c)),
     [eligible, soldTodayIds]
   );
 
@@ -485,9 +503,9 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
           <div style={styles.nextLabel}>
             <Route size={13} /> Volgende in de looproute
           </div>
-          <div style={styles.nextName}>{nextCustomer.name || `${nextCustomer.street} ${nextCustomer.houseNumber}`}</div>
+          <div style={styles.nextName}>{nextCustomer.name || `${nextCustomer.street} ${nextCustomer.houseNumber}${nextCustomer.addition ? `-${nextCustomer.addition}` : ""}`}</div>
           <div style={styles.nextAddress}>
-            {nextCustomer.street} {nextCustomer.houseNumber}, {nextCustomer.postalCode} {nextCustomer.city}
+            {nextCustomer.street} {nextCustomer.houseNumber}{nextCustomer.addition ? `-${nextCustomer.addition}` : ""}, {nextCustomer.postalCode} {nextCustomer.city}
           </div>
           <button style={styles.nextBtn} onClick={() => setActiveCustomer(nextCustomer)}>
             Verkocht <ChevronRight size={16} />
@@ -548,11 +566,14 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
       <div style={styles.list}>
         {filtered.map((c) => {
           const visited = soldTodayIds.has(c.id);
+          const onVacation = isOnVacation(c);
+          const lastSale = lastSaleByCustomer[c.id];
+          const huisnr = `${c.houseNumber}${c.addition ? `-${c.addition}` : ""}`;
           return (
-            <div key={c.id} style={{ ...styles.row, opacity: visited ? 0.6 : 1 }}>
+            <div key={c.id} style={{ ...styles.row, opacity: visited || onVacation ? 0.6 : 1 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <div style={styles.rowTitle}>{c.name || `${c.street} ${c.houseNumber}`}</div>
+                  <div style={styles.rowTitle}>{c.name || `${c.street} ${huisnr}`}</div>
                   {c.status === "kans" && (
                     <span style={{ ...styles.statusBadge, background: STATUS_META.kans.bg, color: STATUS_META.kans.color }}>
                       Kans
@@ -563,10 +584,20 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
                       <CircleCheck size={11} /> Vandaag geweest
                     </span>
                   )}
+                  {onVacation && (
+                    <span style={{ ...styles.statusBadge, background: "#E7E2F5", color: "#6B5FA8" }}>
+                      Op vakantie tot {new Date(c.vacationEnd).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}
+                    </span>
+                  )}
                 </div>
                 <div style={styles.rowSub}>
-                  {c.street} {c.houseNumber}, {c.postalCode} {c.city}
+                  {c.street} {huisnr}, {c.postalCode} {c.city}
                 </div>
+                {lastSale && (
+                  <div style={styles.rowSub}>
+                    Laatst: {formatDateTime(lastSale.ts)} · {lastSale.eggCount} st.
+                  </div>
+                )}
               </div>
               {c.phone && (
                 <a
@@ -912,6 +943,11 @@ function KlantenTab({ customers, onAdd, onAddMany, onUpdate, onDelete, onReorder
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <div style={styles.rowTitle}>{c.name || "(zonder naam)"}</div>
                   <span style={{ ...styles.statusBadge, background: meta.bg, color: meta.color }}>{meta.label}</span>
+                  {isOnVacation(c) && (
+                    <span style={{ ...styles.statusBadge, background: "#E7E2F5", color: "#6B5FA8" }}>
+                      Vakantie tot {new Date(c.vacationEnd).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}
+                    </span>
+                  )}
                 </div>
                 <div style={styles.rowSub}>
                   {c.street} {c.houseNumber}{c.addition ? `-${c.addition}` : ""}, {c.postalCode} {c.city}
@@ -988,11 +1024,13 @@ function RouteModal({ customers, statusFilter = "alle", onClose, onSave }) {
   const [query, setQuery] = useState("");
   const byId = useMemo(() => Object.fromEntries(customers.map((c) => [c.id, c])), [customers]);
 
-  function move(index, dir) {
+  function move(visIdx, dir) {
+    const targetVisIdx = visIdx + dir;
+    if (targetVisIdx < 0 || targetVisIdx >= visible.length) return;
+    const globalA = visible[visIdx].i;
+    const globalB = visible[targetVisIdx].i;
     const newOrder = [...order];
-    const target = index + dir;
-    if (target < 0 || target >= newOrder.length) return;
-    [newOrder[index], newOrder[target]] = [newOrder[target], newOrder[index]];
+    [newOrder[globalA], newOrder[globalB]] = [newOrder[globalB], newOrder[globalA]];
     setOrder(newOrder);
   }
 
@@ -1054,23 +1092,30 @@ function RouteModal({ customers, statusFilter = "alle", onClose, onSave }) {
               : "Niets gevonden."}
           </div>
         )}
-        {visible.map(({ id, i }) => {
+        {visible.map(({ id, i }, visIdx) => {
           const c = byId[id];
           if (!c) return null;
+          const huisnr = `${c.houseNumber}${c.addition ? `-${c.addition}` : ""}`;
+          const onVacation = isOnVacation(c);
           return (
-            <div key={id} style={styles.routeRow}>
+            <div key={id} style={{ ...styles.routeRow, opacity: onVacation ? 0.55 : 1 }}>
               <div style={styles.routeNum}>{i + 1}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={styles.rowTitle}>{c.name || `${c.street} ${c.houseNumber}`}</div>
-                <div style={styles.rowSub}>{c.street} {c.houseNumber}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <div style={styles.rowTitle}>{c.name || `${c.street} ${huisnr}`}</div>
+                  {onVacation && (
+                    <span style={{ ...styles.statusBadge, background: "#E7E2F5", color: "#6B5FA8" }}>Vakantie</span>
+                  )}
+                </div>
+                <div style={styles.rowSub}>{c.street} {huisnr}</div>
               </div>
               <div style={{ display: "flex", gap: 4 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <button style={styles.routeArrow} disabled={i === 0} onClick={() => move(i, -1)} title="Eén omhoog">
-                    <ArrowUp size={14} color={i === 0 ? T.line : T.ink} />
+                  <button style={styles.routeArrow} disabled={visIdx === 0} onClick={() => move(visIdx, -1)} title="Eén omhoog">
+                    <ArrowUp size={14} color={visIdx === 0 ? T.line : T.ink} />
                   </button>
-                  <button style={styles.routeArrow} disabled={i === order.length - 1} onClick={() => move(i, 1)} title="Eén omlaag">
-                    <ArrowDown size={14} color={i === order.length - 1 ? T.line : T.ink} />
+                  <button style={styles.routeArrow} disabled={visIdx === visible.length - 1} onClick={() => move(visIdx, 1)} title="Eén omlaag">
+                    <ArrowDown size={14} color={visIdx === visible.length - 1 ? T.line : T.ink} />
                   </button>
                 </div>
                 {order.length > 8 && (
@@ -1098,7 +1143,7 @@ function RouteModal({ customers, statusFilter = "alle", onClose, onSave }) {
 
 function CustomerForm({ initial, onClose, onSave }) {
   const [form, setForm] = useState(
-    initial || { id: uid(), name: "", postalCode: "", houseNumber: "", addition: "", street: "", city: "", phone: "", status: "klant" }
+    initial || { id: uid(), name: "", postalCode: "", houseNumber: "", addition: "", street: "", city: "", phone: "", status: "klant", vacationStart: "", vacationEnd: "" }
   );
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -1136,6 +1181,23 @@ function CustomerForm({ initial, onClose, onSave }) {
       <FormField label="Straat" value={form.street} onChange={set("street")} placeholder="Dorpsstraat" />
       <FormField label="Plaats" value={form.city} onChange={set("city")} placeholder="Woerden" />
       <FormField label="Telefoon / WhatsApp (optioneel)" value={form.phone} onChange={set("phone")} placeholder="06 12345678" />
+
+      <div style={styles.modalLabel}>Vakantie (optioneel)</div>
+      <div style={styles.formNote}>
+        Tijdens deze periode wordt de klant automatisch overgeslagen als "volgende in de looproute" — zonder dat je de status hoeft te wijzigen.
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <FormField label="Van" type="date" value={form.vacationStart || ""} onChange={set("vacationStart")} style={{ flex: 1 }} />
+        <FormField label="Tot" type="date" value={form.vacationEnd || ""} onChange={set("vacationEnd")} style={{ flex: 1 }} />
+      </div>
+      {(form.vacationStart || form.vacationEnd) && (
+        <button
+          style={styles.cancelLink}
+          onClick={() => setForm({ ...form, vacationStart: "", vacationEnd: "" })}
+        >
+          Vakantie wissen
+        </button>
+      )}
 
       <button
         style={styles.confirmBtn}
