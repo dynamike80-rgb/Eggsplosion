@@ -970,13 +970,13 @@ function KlantenTab({ customers, onAdd, onAddMany, onUpdate, onDelete, onReorder
         </ModalOverlay>
       )}
       {showRoute && (
-        <RouteModal customers={customers} onClose={() => setShowRoute(false)} onSave={(list) => { onReorder(list); setShowRoute(false); }} />
+        <RouteModal customers={customers} statusFilter={filter} onClose={() => setShowRoute(false)} onSave={(list) => { onReorder(list); setShowRoute(false); }} />
       )}
     </div>
   );
 }
 
-function RouteModal({ customers, onClose, onSave }) {
+function RouteModal({ customers, statusFilter = "alle", onClose, onSave }) {
   const routable = useMemo(
     () =>
       customers
@@ -1016,15 +1016,23 @@ function RouteModal({ customers, onClose, onSave }) {
   const visible = order
     .map((id, i) => ({ id, i }))
     .filter(({ id }) => {
-      if (!q) return true;
       const c = byId[id];
       if (!c) return false;
+      if (statusFilter !== "alle" && (c.status || "klant") !== statusFilter) return false;
+      if (!q) return true;
       return `${c.name} ${c.street} ${c.houseNumber} ${c.city}`.toLowerCase().includes(q);
     });
+
+  const filterLabels = { klant: "Klanten", kans: "Kansen", geen_interesse: "Geen interesse" };
 
   return (
     <ModalOverlay onClose={onClose}>
       <div style={styles.modalTitle}>Looproute aanpassen</div>
+      {statusFilter !== "alle" && (
+        <div style={{ ...styles.statusBadge, background: T.yolkPale, color: T.yolkDeep, display: "inline-block", marginBottom: 10 }}>
+          Gefilterd op: {filterLabels[statusFilter] || statusFilter}
+        </div>
+      )}
       <div style={styles.formNote}>
         Zet de klanten in de volgorde waarin je ze onderweg tegenkomt. De app toont daarna vanzelf wie de volgende is.
         {order.length > 20 && " Zoek een adres op en gebruik \u201cbovenaan/onderaan\u201d om het snel te verplaatsen."}
@@ -1040,7 +1048,11 @@ function RouteModal({ customers, onClose, onSave }) {
       </div>
       <div style={styles.routeList}>
         {visible.length === 0 && (
-          <div style={{ fontSize: 13, color: T.inkSoft, padding: "10px 4px" }}>Niets gevonden.</div>
+          <div style={{ fontSize: 13, color: T.inkSoft, padding: "10px 4px" }}>
+            {statusFilter === "geen_interesse"
+              ? "Klanten met \u2018Geen interesse\u2019 maken geen deel uit van de looproute."
+              : "Niets gevonden."}
+          </div>
         )}
         {visible.map(({ id, i }) => {
           const c = byId[id];
