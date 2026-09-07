@@ -1,6 +1,6 @@
 {
-  "name": "Eggsplosion",
-  "short_name": "Eggsplosion",
+  "name": "Egg-sellerate",
+  "short_name": "Egg-sellerate",
   "description": "eggs are booming business",
   "start_url": "./index.html",
   "scope": "./",

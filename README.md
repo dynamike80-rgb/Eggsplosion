@@ -1,4 +1,4 @@
-# Eggsplosion
+# Egg-sellerate
 
 Klanten-, verkoop- en voorraadbeheer voor de eierverkoop.
 
