@@ -492,7 +492,7 @@ function Header({ stock, revenue }) {
       <div style={styles.headerTop}>
         <div>
           <div style={styles.headerTitle}>Egg-sellerate</div>
-          <div style={styles.headerSlogan}>eggs are booming business</div>
+          <div style={styles.headerSlogan}>slimme app voor Egg-sperts</div>
         </div>
         <EggMascot size={50} />
       </div>
@@ -673,9 +673,13 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <div style={styles.rowTitle}>{c.name || `${c.street} ${huisnr}`}</div>
-                  {c.status === "kans" && (
+                  {c.status === "kans" ? (
                     <span style={{ ...styles.statusBadge, background: STATUS_META.kans.bg, color: STATUS_META.kans.color }}>
                       Kans
+                    </span>
+                  ) : (
+                    <span style={{ ...styles.statusBadge, background: STATUS_META.klant.bg, color: STATUS_META.klant.color }}>
+                      Klant
                     </span>
                   )}
                   {visited && (
@@ -2210,7 +2214,7 @@ const styles = {
   },
   headerStatNum: { fontFamily: "'Baloo 2', sans-serif", fontSize: 20, fontWeight: 700, lineHeight: 1.1 },
   headerStatLabel: { fontSize: 11, fontWeight: 600, opacity: 0.8, marginTop: 2 },
-  content: { flex: 1, overflowY: "auto", padding: "16px 16px 90px", background: T.cream },
+  content: { flex: 1, overflowY: "auto", padding: "16px", background: T.cream },
   errorBanner: { background: "#FBDCD8", color: T.danger, fontSize: 12.5, padding: "8px 16px" },
   searchRow: {
     display: "flex",
@@ -2308,10 +2312,7 @@ const styles = {
     display: "flex",
     borderTop: `1.5px solid ${T.line}`,
     background: T.surface,
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    flexShrink: 0,
   },
   tabBtn: {
     flex: 1,

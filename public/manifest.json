@@ -1,7 +1,7 @@
 {
   "name": "Egg-sellerate",
   "short_name": "Egg-sellerate",
-  "description": "eggs are booming business",
+  "description": "slimme app voor Egg-sperts",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
