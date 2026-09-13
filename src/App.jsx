@@ -117,7 +117,46 @@ function getSeasonalFactor(date) {
   return { factor: 1, label: null };
 }
 
-/* ---------- WhatsApp templates ---------- */
+/* ---------- verdiensten via Egg-sellent (weekstaffel) ---------- */
+/* Bron: officiële Egg-sellent-staffel. 0-500 eieren = 4,5ct/ei (basis),
+   daarboven +0,1ct per volle 100 eieren, per week (resetten maandag 00:00). */
+function calcWeeklyEarnings(eggCount) {
+  if (!eggCount || eggCount <= 0) return 0;
+  let earnings = 0;
+  let remaining = eggCount;
+  const firstBracket = Math.min(remaining, 500);
+  earnings += firstBracket * 0.045;
+  remaining -= firstBracket;
+  let k = 0;
+  while (remaining > 0) {
+    const rate = 0.045 + 0.001 * (k + 1);
+    const amountInBracket = Math.min(remaining, 100);
+    earnings += amountInBracket * rate;
+    remaining -= amountInBracket;
+    k++;
+  }
+  return earnings;
+}
+
+function getWeekBounds(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=zo, 1=ma, ... 6=za
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(d.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { start: monday, end: sunday };
+}
+
+function getWeekKey(ts) {
+  const { start } = getWeekBounds(new Date(ts));
+  return start.toISOString().slice(0, 10);
+}
+
+
 function greet(naam) {
   return naam ? `Hoi familie ${naam}` : "Hoi";
 }
@@ -606,9 +645,25 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
           <div style={styles.nextAddress}>
             {nextCustomer.street} {nextCustomer.houseNumber}{nextCustomer.addition ? `-${nextCustomer.addition}` : ""}, {nextCustomer.postalCode} {nextCustomer.city}
           </div>
-          <button style={styles.nextBtn} onClick={() => setActiveCustomer(nextCustomer)}>
-            Verkocht <ChevronRight size={16} />
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={{ ...styles.nextBtn, flex: 1, width: "auto" }} onClick={() => setActiveCustomer(nextCustomer)}>
+              Verkocht <ChevronRight size={16} />
+            </button>
+            <button
+              style={styles.noSaleBtn}
+              onClick={() => onLogSale({
+                id: uid(),
+                customerId: nextCustomer.id,
+                customerLabel: nextCustomer.name || `${nextCustomer.street} ${nextCustomer.houseNumber}`,
+                eggCount: 0,
+                amount: 0,
+                tip: 0,
+                ts: Date.now(),
+              })}
+            >
+              Geen verkoop
+            </button>
+          </div>
         </div>
       )}
 
@@ -1611,8 +1666,9 @@ function EditSaleModal({ sale, onClose, onSave, onDelete }) {
 }
 
 function EditPurchaseModal({ purchase, onClose, onSave, onDelete }) {
-  const [count, setCount] = useState(purchase.eggCount);
+  const [count, setCount] = useState(String(purchase.eggCount));
   const [cost, setCost] = useState(purchase.cost ? String(purchase.cost) : "");
+  const numCount = parseInt(count, 10) || 0;
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -1621,18 +1677,24 @@ function EditPurchaseModal({ purchase, onClose, onSave, onDelete }) {
       <div style={{ height: 10 }} />
       <div style={styles.modalLabel}>Aantal eieren besteld</div>
       <div style={styles.stepperRow}>
-        <button style={styles.stepperBtn} onClick={() => setCount((n) => Math.max(6, n - 6))}>
+        <button style={styles.stepperBtn} onClick={() => setCount(String(Math.max(0, numCount - 1)))}>
           <MinusCircle size={22} color={T.ink} />
         </button>
-        <div style={styles.stepperNum}>{count}</div>
-        <button style={styles.stepperBtn} onClick={() => setCount((n) => n + 6)}>
+        <input
+          type="number"
+          inputMode="numeric"
+          value={count}
+          onChange={(e) => setCount(e.target.value)}
+          style={styles.stepperInput}
+        />
+        <button style={styles.stepperBtn} onClick={() => setCount(String(numCount + 1))}>
           <PlusCircle size={22} color={T.ink} />
         </button>
       </div>
       <FormField label="Inkoopkosten (optioneel)" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="bijv. 18,50" />
       <button
         style={styles.confirmBtn}
-        onClick={() => onSave({ ...purchase, eggCount: count, cost: parseFloat(cost) || 0 })}
+        onClick={() => onSave({ ...purchase, eggCount: numCount, cost: parseFloat(cost) || 0 })}
       >
         <Check size={18} /> Wijzigingen opslaan
       </button>
@@ -1802,19 +1864,28 @@ function BackupSection({ customers, sales, purchases, extras, settings, onImport
 }
 
 function PurchaseModal({ onClose, onConfirm }) {
-  const [count, setCount] = useState(60);
+  const [count, setCount] = useState("");
   const [cost, setCost] = useState("");
+
+  const numCount = parseInt(count, 10) || 0;
 
   return (
     <ModalOverlay onClose={onClose}>
       <div style={styles.modalTitle}>Inkoop registreren</div>
       <div style={styles.modalLabel}>Aantal eieren besteld</div>
       <div style={styles.stepperRow}>
-        <button style={styles.stepperBtn} onClick={() => setCount((n) => Math.max(6, n - 6))}>
+        <button style={styles.stepperBtn} onClick={() => setCount(String(Math.max(0, numCount - 1)))}>
           <MinusCircle size={22} color={T.ink} />
         </button>
-        <div style={styles.stepperNum}>{count}</div>
-        <button style={styles.stepperBtn} onClick={() => setCount((n) => n + 6)}>
+        <input
+          type="number"
+          inputMode="numeric"
+          value={count}
+          onChange={(e) => setCount(e.target.value)}
+          placeholder="0"
+          style={styles.stepperInput}
+        />
+        <button style={styles.stepperBtn} onClick={() => setCount(String(numCount + 1))}>
           <PlusCircle size={22} color={T.ink} />
         </button>
       </div>
@@ -1827,7 +1898,7 @@ function PurchaseModal({ onClose, onConfirm }) {
       <button
         style={styles.confirmBtn}
         onClick={() =>
-          onConfirm({ id: uid(), eggCount: count, cost: parseFloat(cost) || 0, ts: Date.now() })
+          numCount > 0 && onConfirm({ id: uid(), eggCount: numCount, cost: parseFloat(cost) || 0, ts: Date.now() })
         }
       >
         <Check size={18} /> Opslaan
@@ -1995,17 +2066,36 @@ function StatsTab({ customers, sales, purchases, extras, settings }) {
 
     // top 5 klanten op omzet (all-time)
     const revenueByCustomer = {};
+    const eggsByCustomer = {};
     sales.forEach((s) => {
       if (!s.customerId) return;
       revenueByCustomer[s.customerId] = (revenueByCustomer[s.customerId] || 0) + s.amount;
+      eggsByCustomer[s.customerId] = (eggsByCustomer[s.customerId] || 0) + s.eggCount;
     });
     const topSpenders = Object.entries(revenueByCustomer)
-      .map(([id, amount]) => ({ customer: customers.find((c) => c.id === id), amount }))
+      .map(([id, amount]) => ({ customer: customers.find((c) => c.id === id), amount, eggs: eggsByCustomer[id] || 0 }))
       .filter((x) => x.customer)
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5);
 
-    return { revenue, extraRevenue, tips, eggsSold, eggsBought, cost, margin, weeks, maxWeek, weeksWithData, recentEggsAvg, topTippers, topSpenders };
+    // verdiensten via Egg-sellent, per kalenderweek (ma-zo) op basis van de officiële staffel
+    const eggsByWeek = {};
+    sales.forEach((s) => {
+      const key = getWeekKey(s.ts);
+      eggsByWeek[key] = (eggsByWeek[key] || 0) + s.eggCount;
+    });
+    const thisWeekKey = getWeekBounds(now).start.toISOString().slice(0, 10);
+    const lastWeekKey = getWeekBounds(new Date(now.getTime() - 7 * 24 * 3600 * 1000)).start.toISOString().slice(0, 10);
+    const thisWeekEggsForEarnings = eggsByWeek[thisWeekKey] || 0;
+    const lastWeekEggsForEarnings = eggsByWeek[lastWeekKey] || 0;
+    const thisWeekEarnings = calcWeeklyEarnings(thisWeekEggsForEarnings);
+    const lastWeekEarnings = calcWeeklyEarnings(lastWeekEggsForEarnings);
+    const totalEarnings = Object.values(eggsByWeek).reduce((sum, eggs) => sum + calcWeeklyEarnings(eggs), 0);
+
+    return {
+      revenue, extraRevenue, tips, eggsSold, eggsBought, cost, margin, weeks, maxWeek, weeksWithData, recentEggsAvg,
+      topTippers, topSpenders, thisWeekEarnings, lastWeekEarnings, totalEarnings, thisWeekEggsForEarnings,
+    };
   }, [sales, purchases, extras, customers, period]);
 
   const periodLabels = { week: "deze week", maand: "deze maand", jaar: "dit jaar", totaal: "totaal" };
@@ -2037,6 +2127,19 @@ function StatsTab({ customers, sales, purchases, extras, settings }) {
         <StatCard label="Eieren ingekocht" value={stats.eggsBought} />
         {stats.cost > 0 && <StatCard label="Winstmarge (eieren)" value={formatEuro(stats.margin)} accent />}
         <StatCard label="Fooi" value={formatEuro(stats.tips)} accent />
+      </div>
+
+      <div style={styles.sectionLabel}>
+        <TrendingUp size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+        Verdiensten via Egg-sellent
+      </div>
+      <div style={styles.formNote}>
+        Dit is wat je zelf overhoudt (niet de omzet die klanten betalen) — via de officiële weekstaffel, die elke maandag opnieuw begint.
+      </div>
+      <div style={styles.statsGrid}>
+        <StatCard label={`Deze week (${stats.thisWeekEggsForEarnings} eieren)`} value={formatEuro(stats.thisWeekEarnings)} accent />
+        <StatCard label="Vorige week" value={formatEuro(stats.lastWeekEarnings)} />
+        <StatCard label="Totaal verdiend (alle weken)" value={formatEuro(stats.totalEarnings)} accent />
       </div>
 
       {(settings.historicalWeeklyAvg > 0 || stats.weeksWithData.length >= 2) && (() => {
@@ -2082,12 +2185,12 @@ function StatsTab({ customers, sales, purchases, extras, settings }) {
         <EmptyState title="Nog geen verkopen" text="Zodra er verkopen aan klanten worden gelogd, verschijnt de top 5 hier." />
       ) : (
         <div style={styles.list}>
-          {stats.topSpenders.map(({ customer: c, amount }, i) => (
+          {stats.topSpenders.map(({ customer: c, amount, eggs }, i) => (
             <div key={c.id} style={styles.row}>
               <div style={styles.routeNum}>{i + 1}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={styles.rowTitle}>{c.name || `${c.street} ${c.houseNumber}`}</div>
-                <div style={styles.rowSub}>{formatEuro(amount)} totale omzet</div>
+                <div style={styles.rowSub}>{formatEuro(amount)} · {eggs} eieren totaal</div>
               </div>
             </div>
           ))}
@@ -2348,6 +2451,10 @@ const styles = {
   stepperRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 12 },
   stepperBtn: { background: "transparent", border: "none", display: "flex" },
   stepperNum: { fontFamily: "'Baloo 2',sans-serif", fontSize: 36, fontWeight: 700, minWidth: 60, textAlign: "center" },
+  stepperInput: {
+    fontFamily: "'Baloo 2',sans-serif", fontSize: 32, fontWeight: 700, minWidth: 90, textAlign: "center",
+    border: `1.5px solid ${T.line}`, borderRadius: 10, padding: "4px 8px", background: T.cream, color: T.ink,
+  },
   presetRow: { display: "flex", gap: 8, marginBottom: 18, justifyContent: "center", flexWrap: "wrap" },
   presetBtn: { border: "1.5px solid", borderRadius: 999, padding: "6px 14px", fontSize: 13.5, fontWeight: 700, background: "transparent" },
   amountRow: {
@@ -2448,6 +2555,11 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
     background: T.ink, color: "#fff", border: "none", borderRadius: 999,
     padding: "10px 14px", fontSize: 13.5, fontWeight: 700, width: "100%",
+  },
+  noSaleBtn: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: "transparent", color: T.ink, border: `1.5px solid ${T.ink}`, borderRadius: 999,
+    padding: "10px 14px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
   },
   routeList: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 16, maxHeight: 320, overflowY: "auto" },
   routeRow: {
