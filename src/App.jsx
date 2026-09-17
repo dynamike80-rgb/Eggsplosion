@@ -3,7 +3,8 @@ import {
   ShoppingBag, Users, Package, Plus, X, Check, Search,
   MessageCircle, Trash2, Pencil, ChevronRight, TrendingUp,
   MinusCircle, PlusCircle, Upload, Download, ArrowUp, ArrowDown,
-  Route, CircleCheck, BarChart3, Gift, Heart, Star, Send
+  Route, CircleCheck, BarChart3, Gift, Heart, Star, Send,
+  PackageX, AlertTriangle
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -336,20 +337,22 @@ export default function EggSellerateApp() {
   const [sales, setSales] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [extras, setExtras] = useState([]);
+  const [writeoffs, setWriteoffs] = useState([]);
   const [settings, setSettings] = useState({ pricePerEgg: 0.35 });
   const [saveError, setSaveError] = useState("");
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const [c, s, p, ex, set] = await Promise.all([
+      const [c, s, p, ex, wo, set] = await Promise.all([
         loadKey("customers", []),
         loadKey("sales", []),
         loadKey("purchases", []),
         loadKey("extras", []),
+        loadKey("writeoffs", []),
         loadKey("settings", { pricePerEgg: 0.35 }),
       ]);
-      const failedOne = [c, s, p, ex, set].find((r) => r.failed);
+      const failedOne = [c, s, p, ex, wo, set].find((r) => r.failed);
       setLoadError(failedOne ? (failedOne.errorDetail || true) : false);
       const customersData = c.value;
       const needsMigration = customersData.some((x) => x.routeOrder === undefined);
@@ -358,6 +361,7 @@ export default function EggSellerateApp() {
       setSales(s.value);
       setPurchases(p.value);
       setExtras(ex.value);
+      setWriteoffs(wo.value);
       setSettings(set.value);
       setLoading(false);
       if (needsMigration) saveKey("customers", migrated);
@@ -374,8 +378,9 @@ export default function EggSellerateApp() {
   const stock = useMemo(() => {
     const bought = purchases.reduce((sum, p) => sum + p.eggCount, 0);
     const sold = sales.reduce((sum, s) => sum + s.eggCount, 0);
-    return bought - sold;
-  }, [purchases, sales]);
+    const written_off = writeoffs.reduce((sum, w) => sum + w.eggCount, 0);
+    return bought - sold - written_off;
+  }, [purchases, sales, writeoffs]);
 
   const revenueThisWeek = useMemo(() => {
     const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
@@ -438,6 +443,7 @@ export default function EggSellerateApp() {
             purchases={purchases}
             sales={sales}
             extras={extras}
+            writeoffs={writeoffs}
             customers={customers}
             settings={settings}
             onLogPurchase={(p) => persist("purchases", [...purchases, p], setPurchases)}
@@ -448,11 +454,15 @@ export default function EggSellerateApp() {
             onDeletePurchase={(id) => persist("purchases", purchases.filter((x) => x.id !== id), setPurchases)}
             onUpdateExtra={(e) => persist("extras", extras.map((x) => (x.id === e.id ? e : x)), setExtras)}
             onDeleteExtra={(id) => persist("extras", extras.filter((x) => x.id !== id), setExtras)}
+            onLogWriteoff={(w) => persist("writeoffs", [...writeoffs, w], setWriteoffs)}
+            onUpdateWriteoff={(w) => persist("writeoffs", writeoffs.map((x) => (x.id === w.id ? w : x)), setWriteoffs)}
+            onDeleteWriteoff={(id) => persist("writeoffs", writeoffs.filter((x) => x.id !== id), setWriteoffs)}
             onImportAll={async (data) => {
               if (data.customers) await persist("customers", data.customers, setCustomers);
               if (data.sales) await persist("sales", data.sales, setSales);
               if (data.purchases) await persist("purchases", data.purchases, setPurchases);
               if (data.extras) await persist("extras", data.extras, setExtras);
+              if (data.writeoffs) await persist("writeoffs", data.writeoffs, setWriteoffs);
               if (data.settings) await persist("settings", data.settings, setSettings);
             }}
           />
@@ -461,7 +471,7 @@ export default function EggSellerateApp() {
           <BerichtenTab customers={customers} settings={settings} onUpdateSettings={(s) => persist("settings", s, setSettings)} />
         )}
         {tab === "stats" && (
-          <StatsTab customers={customers} sales={sales} purchases={purchases} extras={extras} settings={settings} />
+          <StatsTab customers={customers} sales={sales} purchases={purchases} extras={extras} writeoffs={writeoffs} settings={settings} />
         )}
       </div>
       <TabBar tab={tab} setTab={setTab} />
@@ -1013,6 +1023,109 @@ function ExtraModal({ initial, onClose, onConfirm, onDelete }) {
   );
 }
 
+function WriteoffModal({ woType, initial, onClose, onConfirm, onDelete }) {
+  const type = initial ? initial.woType : woType;
+  const [count, setCount] = useState(initial ? String(initial.eggCount) : "");
+  const [cause, setCause] = useState(initial ? initial.cause : (type === "niet_geleverd" ? "egg-sellent" : "egg-sellent"));
+  const [note, setNote] = useState(initial?.note || "");
+  const [reported, setReported] = useState(initial?.reported || false);
+  const numCount = parseInt(count, 10) || 0;
+
+  const isEggSellentFault = type === "niet_geleverd" || cause === "egg-sellent";
+  const title = type === "niet_geleverd" ? "Niet geleverde eieren" : "Beschadigde eieren";
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div style={styles.modalTitle}>{title}</div>
+      <div style={styles.formNote}>
+        Dit boekt eieren af van je voorraad en zet het in het logboek.
+      </div>
+
+      {type === "beschadigd" && (
+        <>
+          <div style={styles.modalLabel}>Oorzaak</div>
+          <div style={styles.statusToggleRow}>
+            {[
+              { id: "egg-sellent", label: "Egg-sellent" },
+              { id: "eigen_schuld", label: "Eigen schuld" },
+            ].map((o) => (
+              <button
+                key={o.id}
+                onClick={() => setCause(o.id)}
+                style={{
+                  ...styles.statusToggleBtn,
+                  background: cause === o.id ? T.yolk : "transparent",
+                  color: cause === o.id ? "#fff" : T.ink,
+                  borderColor: cause === o.id ? T.yolk : T.line,
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div style={styles.modalLabel}>Aantal eieren</div>
+      <div style={styles.stepperRow}>
+        <button style={styles.stepperBtn} onClick={() => setCount(String(Math.max(0, numCount - 1)))}>
+          <MinusCircle size={22} color={T.ink} />
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          value={count}
+          onChange={(e) => setCount(e.target.value)}
+          placeholder="0"
+          style={styles.stepperInput}
+        />
+        <button style={styles.stepperBtn} onClick={() => setCount(String(numCount + 1))}>
+          <PlusCircle size={22} color={T.ink} />
+        </button>
+      </div>
+
+      <FormField label="Notitie (optioneel)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="bijv. doos was doorweekt" />
+
+      {isEggSellentFault && (
+        <button
+          style={{
+            ...styles.statusToggleBtn,
+            width: "100%", marginBottom: 16,
+            background: reported ? T.yolk : "transparent",
+            color: reported ? "#fff" : T.ink,
+            borderColor: reported ? T.yolk : T.line,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}
+          onClick={() => setReported((r) => !r)}
+        >
+          {reported ? <CircleCheck size={16} /> : <AlertTriangle size={16} />}
+          {reported ? "Gemeld bij Egg-sellent" : "Nog niet gemeld — tik als je 'm gebeld/geappt hebt"}
+        </button>
+      )}
+
+      <button
+        style={styles.confirmBtn}
+        onClick={() =>
+          numCount > 0 &&
+          onConfirm({
+            id: initial ? initial.id : uid(),
+            woType: type,
+            cause: type === "niet_geleverd" ? "egg-sellent" : cause,
+            eggCount: numCount,
+            note: note.trim(),
+            reported: isEggSellentFault ? reported : false,
+            ts: initial ? initial.ts : Date.now(),
+          })
+        }
+      >
+        <Check size={18} /> {initial ? "Wijzigingen opslaan" : "Afboeken"}
+      </button>
+      {initial && onDelete && <DeleteConfirmButton onDelete={() => onDelete(initial.id)} label="afboeking" />}
+      <button style={styles.cancelLink} onClick={onClose}>Annuleren</button>
+    </ModalOverlay>
+  );
+}
+
 /* ---------- Klanten tab ---------- */
 function KlantenTab({ customers, onAdd, onAddMany, onUpdate, onDelete, onReorder, onImportRhythm }) {
   const [showForm, setShowForm] = useState(false);
@@ -1453,9 +1566,9 @@ function FormField({ label, style, ...props }) {
 
 /* ---------- Voorraad tab ---------- */
 function VoorraadTab({
-  stock, purchases, sales, extras, customers, settings, onLogPurchase, onUpdateSettings,
+  stock, purchases, sales, extras, writeoffs, customers, settings, onLogPurchase, onUpdateSettings,
   onUpdateSale, onDeleteSale, onUpdatePurchase, onDeletePurchase,
-  onUpdateExtra, onDeleteExtra, onImportAll,
+  onUpdateExtra, onDeleteExtra, onLogWriteoff, onUpdateWriteoff, onDeleteWriteoff, onImportAll,
 }) {
   const [showBuy, setShowBuy] = useState(false);
   const [priceInput, setPriceInput] = useState(settings.pricePerEgg);
@@ -1463,16 +1576,23 @@ function VoorraadTab({
   const [editSale, setEditSale] = useState(null);
   const [editPurchase, setEditPurchase] = useState(null);
   const [editExtra, setEditExtra] = useState(null);
+  const [writeoffType, setWriteoffType] = useState(null); // "niet_geleverd" | "beschadigd" (nieuw aanmaken)
+  const [editWriteoff, setEditWriteoff] = useState(null);
 
   const ledger = useMemo(() => {
     const items = [
       ...purchases.map((p) => ({ ...p, type: "purchase" })),
       ...sales.map((s) => ({ ...s, type: "sale" })),
+      ...writeoffs.map((w) => ({ ...w, type: "writeoff" })),
     ];
     return items.sort((a, b) => b.ts - a.ts).slice(0, 25);
-  }, [purchases, sales]);
+  }, [purchases, sales, writeoffs]);
 
   const recentExtras = useMemo(() => [...extras].sort((a, b) => b.ts - a.ts).slice(0, 15), [extras]);
+  const unreported = useMemo(
+    () => writeoffs.filter((w) => w.cause === "egg-sellent" && !w.reported),
+    [writeoffs]
+  );
 
   return (
     <div>
@@ -1487,6 +1607,25 @@ function VoorraadTab({
       <button style={styles.primaryBtn} onClick={() => setShowBuy(true)}>
         <Plus size={17} /> Inkoop registreren
       </button>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button style={styles.writeoffBtn} onClick={() => setWriteoffType("niet_geleverd")}>
+          <PackageX size={15} /> Niet geleverd
+        </button>
+        <button style={styles.writeoffBtn} onClick={() => setWriteoffType("beschadigd")}>
+          <PackageX size={15} /> Beschadigd
+        </button>
+      </div>
+
+      {unreported.length > 0 && (
+        <div style={styles.unreportedBanner}>
+          <AlertTriangle size={15} color={T.danger} />
+          <div style={{ flex: 1 }}>
+            {unreported.length} melding{unreported.length === 1 ? "" : "en"} nog niet doorgegeven aan Egg-sellent
+            (06-44094867). Tik erop in "Recente boekingen" om af te vinken.
+          </div>
+        </div>
+      )}
 
       <div style={styles.settingsRow}>
         <label style={styles.fieldLabel}>Verkoopprijs per ei</label>
@@ -1531,6 +1670,7 @@ function VoorraadTab({
         sales={sales}
         purchases={purchases}
         extras={extras}
+        writeoffs={writeoffs}
         settings={settings}
         onImportAll={onImportAll}
       />
@@ -1539,33 +1679,48 @@ function VoorraadTab({
       <div style={styles.helperNote}>Tik op een boeking om deze te wijzigen of te verwijderen.</div>
       {ledger.length === 0 && <EmptyState title="Nog geen boekingen" text="Inkoop en verkopen verschijnen hier." />}
       <div style={styles.list}>
-        {ledger.map((item) => (
-          <button
-            key={item.id}
-            style={{ ...styles.row, ...styles.rowClickable }}
-            onClick={() => (item.type === "purchase" ? setEditPurchase(item) : setEditSale(item))}
-          >
-            <div style={{ flex: 1, textAlign: "left" }}>
-              <div style={styles.rowTitle}>
-                {item.type === "purchase" ? "Inkoop bij Egg-sellent" : item.customerLabel}
-              </div>
-              <div style={styles.rowSub}>{formatDateTime(item.ts)}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontWeight: 700, color: item.type === "purchase" ? T.yolkDeep : T.ink }}>
-                {item.type === "purchase" ? "+" : "-"}
-                {item.eggCount} eieren
-              </div>
-              {item.type === "sale" && (
-                <div style={{ fontSize: 12.5, color: T.inkSoft }}>
-                  {formatEuro(item.amount)}
-                  {item.tip > 0 && <span style={{ color: T.yolkDeep }}> +{formatEuro(item.tip)} fooi</span>}
+        {ledger.map((item) => {
+          const onClick = () => {
+            if (item.type === "purchase") setEditPurchase(item);
+            else if (item.type === "writeoff") setEditWriteoff(item);
+            else setEditSale(item);
+          };
+          const title =
+            item.type === "purchase" ? "Inkoop bij Egg-sellent"
+            : item.type === "writeoff" ? (item.type2Label || (item.woType === "niet_geleverd" ? "Niet geleverd" : "Beschadigd"))
+            : item.customerLabel;
+          return (
+            <button key={item.id} style={{ ...styles.row, ...styles.rowClickable }} onClick={onClick}>
+              <div style={{ flex: 1, textAlign: "left" }}>
+                <div style={styles.rowTitle}>{title}</div>
+                <div style={styles.rowSub}>
+                  {formatDateTime(item.ts)}
+                  {item.type === "writeoff" && (
+                    <> · {item.cause === "egg-sellent" ? "oorzaak Egg-sellent" : "eigen schuld"}</>
+                  )}
                 </div>
-              )}
-            </div>
-            <Pencil size={14} color={T.inkSoft} />
-          </button>
-        ))}
+                {item.type === "writeoff" && item.cause === "egg-sellent" && (
+                  <span style={{ ...styles.statusBadge, background: item.reported ? "#DCE9DD" : "#F6DCD5", color: item.reported ? "#3F5D45" : T.danger, marginTop: 4, display: "inline-block" }}>
+                    {item.reported ? "Gemeld bij Egg-sellent" : "Nog niet gemeld"}
+                  </span>
+                )}
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontWeight: 700, color: item.type === "purchase" ? T.yolkDeep : item.type === "writeoff" ? T.danger : T.ink }}>
+                  {item.type === "purchase" ? "+" : "-"}
+                  {item.eggCount} eieren
+                </div>
+                {item.type === "sale" && (
+                  <div style={{ fontSize: 12.5, color: T.inkSoft }}>
+                    {formatEuro(item.amount)}
+                    {item.tip > 0 && <span style={{ color: T.yolkDeep }}> +{formatEuro(item.tip)} fooi</span>}
+                  </div>
+                )}
+              </div>
+              <Pencil size={14} color={T.inkSoft} />
+            </button>
+          );
+        })}
       </div>
 
       {showBuy && (
@@ -1617,6 +1772,22 @@ function VoorraadTab({
           onClose={() => setEditExtra(null)}
           onConfirm={(e) => { onUpdateExtra(e); setEditExtra(null); }}
           onDelete={(id) => { onDeleteExtra(id); setEditExtra(null); }}
+        />
+      )}
+
+      {writeoffType && (
+        <WriteoffModal
+          woType={writeoffType}
+          onClose={() => setWriteoffType(null)}
+          onConfirm={(w) => { onLogWriteoff(w); setWriteoffType(null); }}
+        />
+      )}
+      {editWriteoff && (
+        <WriteoffModal
+          initial={editWriteoff}
+          onClose={() => setEditWriteoff(null)}
+          onConfirm={(w) => { onUpdateWriteoff(w); setEditWriteoff(null); }}
+          onDelete={(id) => { onDeleteWriteoff(id); setEditWriteoff(null); }}
         />
       )}
     </div>
@@ -1773,7 +1944,7 @@ function DeleteConfirmButton({ onDelete, label }) {
   );
 }
 
-function BackupSection({ customers, sales, purchases, extras, settings, onImportAll }) {
+function BackupSection({ customers, sales, purchases, extras, writeoffs, settings, onImportAll }) {
   const fileInputRef = useRef(null);
   const [confirmImport, setConfirmImport] = useState(null); // parsed data pending confirmation
   const [message, setMessage] = useState("");
@@ -1786,6 +1957,7 @@ function BackupSection({ customers, sales, purchases, extras, settings, onImport
       sales,
       purchases,
       extras,
+      writeoffs,
       settings,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -2010,7 +2182,7 @@ function BerichtenTab({ customers, settings, onUpdateSettings }) {
 }
 
 /* ---------- Statistieken tab ---------- */
-function StatsTab({ customers, sales, purchases, extras, settings }) {
+function StatsTab({ customers, sales, purchases, extras, writeoffs, settings }) {
   const [waFor, setWaFor] = useState(null);
   const [period, setPeriod] = useState("week");
 
@@ -2125,6 +2297,9 @@ function StatsTab({ customers, sales, purchases, extras, settings }) {
         <StatCard label={`Omzet acties (${periodLabels[period]})`} value={formatEuro(stats.extraRevenue)} />
         <StatCard label="Eieren verkocht" value={stats.eggsSold} />
         <StatCard label="Eieren ingekocht" value={stats.eggsBought} />
+        {writeoffs.length > 0 && (
+          <StatCard label="Afgeboekt (niet geleverd/beschadigd)" value={writeoffs.reduce((s, w) => s + w.eggCount, 0)} accent />
+        )}
         {stats.cost > 0 && <StatCard label="Winstmarge (eieren)" value={formatEuro(stats.margin)} accent />}
         <StatCard label="Fooi" value={formatEuro(stats.tips)} accent />
       </div>
@@ -2528,6 +2703,16 @@ const styles = {
     width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
     padding: "10px 10px", background: "transparent", color: T.yolkDeep, border: `1.5px dashed ${T.yolk}`,
     borderRadius: 999, fontSize: 12.5, fontWeight: 700, marginBottom: 16,
+  },
+  writeoffBtn: {
+    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+    padding: "10px 10px", background: "#FBDCD8", color: T.danger, border: "none",
+    borderRadius: 999, fontSize: 12.5, fontWeight: 700,
+  },
+  unreportedBanner: {
+    display: "flex", alignItems: "center", gap: 8,
+    background: "#FBDCD8", border: `1.5px solid ${T.danger}`, borderRadius: 14,
+    padding: "10px 12px", marginBottom: 16, fontSize: 12, color: T.danger,
   },
   importMsg: { fontSize: 12, color: T.yolkDeep, background: T.yolkPale, borderRadius: 10, padding: "8px 10px", marginBottom: 10 },
   filterRow: { display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" },
