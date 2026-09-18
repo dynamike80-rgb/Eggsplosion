@@ -781,6 +781,21 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
                   <MessageCircle size={17} color={T.yolkDeep} />
                 </a>
               )}
+              <button
+                style={styles.iconBtn}
+                title="Geen verkoop"
+                onClick={() => onLogSale({
+                  id: uid(),
+                  customerId: c.id,
+                  customerLabel: c.name || `${c.street} ${c.houseNumber}`,
+                  eggCount: 0,
+                  amount: 0,
+                  tip: 0,
+                  ts: Date.now(),
+                })}
+              >
+                <MinusCircle size={17} color={T.inkSoft} />
+              </button>
               <button style={styles.saleBtn} onClick={() => setActiveCustomer(c)}>
                 Verkocht <ChevronRight size={15} />
               </button>
