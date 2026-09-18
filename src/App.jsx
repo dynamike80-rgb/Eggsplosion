@@ -383,8 +383,8 @@ export default function EggSellerateApp() {
   }, [purchases, sales, writeoffs]);
 
   const revenueThisWeek = useMemo(() => {
-    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
-    return sales.filter((s) => s.ts >= weekAgo).reduce((sum, s) => sum + s.amount, 0);
+    const weekStart = getWeekBounds(new Date()).start.getTime();
+    return sales.filter((s) => s.ts >= weekStart).reduce((sum, s) => sum + s.amount, 0);
   }, [sales]);
 
   if (loading) {
@@ -628,11 +628,8 @@ function VerkoopTab({ customers, sales, settings, onLogSale, onLogExtra }) {
   }, [sales]);
 
   const nextCustomer = useMemo(
-    () =>
-      [...eligible]
-        .sort((a, b) => (a.routeOrder ?? 9999) - (b.routeOrder ?? 9999))
-        .find((c) => !soldTodayIds.has(c.id) && !isOnVacation(c)),
-    [eligible, soldTodayIds]
+    () => routeSorted.find((c) => !soldTodayIds.has(c.id) && !isOnVacation(c)),
+    [routeSorted, soldTodayIds]
   );
 
   const filtered = useMemo(() => {
@@ -2190,7 +2187,7 @@ function StatsTab({ customers, sales, purchases, extras, writeoffs, settings }) 
     const now = new Date();
 
     const periodStart = {
-      week: now.getTime() - 7 * 24 * 3600 * 1000,
+      week: getWeekBounds(now).start.getTime(),
       maand: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
       jaar: new Date(now.getFullYear(), 0, 1).getTime(),
       totaal: 0,
