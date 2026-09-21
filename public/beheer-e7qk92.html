@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Egg-sellerate — Beheer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2B2118; --soft: #8C7F68; --line: #F0E4C8; --cream: #FFF8E6;
+    --yolk: #F5A623; --yolkDeep: #DE8E10; --yolkPale: #FFE9B8; --danger: #E2574C; --bg: #fff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Nunito', 'Segoe UI', Arial, sans-serif; margin: 0; background: var(--cream);
+    color: var(--ink);
+  }
+  h1, h2, h3, .tabbtn, .btn, .route-num, .stat-card b {
+    font-family: 'Baloo 2', 'Segoe UI', Arial, sans-serif;
+  }
+  header {
+    background: linear-gradient(135deg, var(--yolk), #FFD65C);
+    padding: 16px 24px; display: flex; align-items: center; gap: 14px;
+    flex-wrap: wrap;
+  }
+  header img.logo { width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); }
+  header .sub { font-size: 13px; color: #6b4e12; font-family: 'Nunito', sans-serif; }
+  nav.tabbar {
+    display: flex; gap: 4px; background: #fff; border-bottom: 1px solid var(--line);
+    padding: 0 16px; overflow-x: auto;
+  }
+  .tabbtn {
+    border: none; background: transparent; padding: 12px 16px; font-size: 14px; font-weight: 700;
+    color: var(--soft); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap;
+  }
+  .tabbtn.active { color: var(--ink); border-bottom-color: var(--yolk); }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+  .route-row {
+    display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;
+  }
+  .route-num {
+    width: 26px; height: 26px; border-radius: 999px; background: var(--yolk); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0;
+  }
+  .route-title { flex: 1; min-width: 0; }
+  .route-title .name { font-weight: 700; font-size: 14px; }
+  .route-title .addr { font-size: 12px; color: var(--soft); }
+  .route-btn {
+    border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 4px 8px;
+    cursor: pointer; font-size: 12px;
+  }
+  .route-btn:disabled { opacity: .35; cursor: default; }
+  .weekbar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .weekbar .bar { width: 70%; background: var(--yolk); border-radius: 4px 4px 0 0; min-height: 2px; }
+  .weekbar .lbl { font-size: 10.5px; color: var(--soft); margin-top: 4px; }
+  .toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px; margin-bottom: 16px;
+  }
+  .toolbar input, .toolbar select {
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px;
+  }
+  .toolbar input[type="text"] { flex: 1; min-width: 180px; }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-card {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 16px; font-size: 13px; color: var(--soft); min-width: 130px;
+  }
+  .stat-card b { display: block; font-size: 18px; color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
+  th, td { padding: 9px 10px; text-align: left; font-size: 13.5px; border-bottom: 1px solid var(--line); }
+  th { background: #FBF1D8; cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { background: #F6E6BE; }
+  tr:hover td { background: #FFFBF0; }
+  tr.row { cursor: pointer; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  }
+  .b-sale { background: #EEE8FB; color: #5B4B8A; }
+  .b-purchase { background: #FFEFCF; color: var(--yolkDeep); }
+  .b-writeoff { background: #FBDCD8; color: var(--danger); }
+  .b-extra { background: #E1F0E4; color: #3F7C4A; }
+  .amount-pos { color: var(--yolkDeep); font-weight: 700; }
+  .amount-neg { color: var(--ink); font-weight: 700; }
+  .empty { text-align: center; padding: 40px; color: var(--soft); }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .panel {
+    background: #fff; border-radius: 14px; padding: 22px; width: 100%; max-width: 420px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .panel h2 { margin-top: 0; font-size: 18px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12.5px; color: var(--soft); margin-bottom: 4px; }
+  .field input, .field select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px;
+  }
+  .row2 { display: flex; gap: 10px; }
+  .row2 > * { flex: 1; }
+  .btn {
+    padding: 10px 16px; border-radius: 999px; border: none; font-weight: 700; font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--ink); color: #fff; width: 100%; margin-top: 8px; }
+  .btn-danger { background: transparent; color: var(--danger); border: 1.5px solid var(--danger); width: 100%; margin-top: 8px; }
+  .btn-ghost { background: transparent; color: var(--soft); width: 100%; margin-top: 8px; }
+  .msg { padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 13.5px; }
+  .msg-ok { background: #E1F0E4; color: #3F7C4A; }
+  .msg-err { background: #FBDCD8; color: var(--danger); }
+  .loading { text-align: center; padding: 60px; color: var(--soft); }
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="data:image/png;base64,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" alt="Egg-sellerate" />
+  <div>
+    <h1>Egg-sellerate — Beheer</h1>
+    <div class="sub">Boekingen, klanten, looproute en statistieken op één plek</div>
+  </div>
+</header>
+<nav class="tabbar">
+  <button class="tabbtn active" data-tab="boekingen">Boekingen</button>
+  <button class="tabbtn" data-tab="klanten">Klanten</button>
+  <button class="tabbtn" data-tab="looproute">Looproute</button>
+  <button class="tabbtn" data-tab="stats">Stats</button>
+</nav>
+<main>
+  <div id="msgBox"></div>
+  <div id="loading" class="loading">Bezig met laden…</div>
+  <div id="content" style="display:none">
+
+    <section id="tab-boekingen" class="tabpane">
+      <div class="stats" id="statsRow"></div>
+      <div class="toolbar">
+        <input type="text" id="search" placeholder="Zoek op naam, adres of notitie…" />
+        <select id="typeFilter">
+          <option value="">Alle types</option>
+          <option value="sale">Verkoop</option>
+          <option value="purchase">Inkoop</option>
+          <option value="writeoff">Afboeking</option>
+          <option value="extra">Extra actie</option>
+        </select>
+        <input type="date" id="dateFrom" title="Van datum" />
+        <input type="date" id="dateTo" title="Tot datum" />
+        <button class="btn" style="background:var(--line)" id="clearFilters">Wis filters</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="ts">Datum ▾</th>
+            <th data-sort="typeLabel">Type</th>
+            <th data-sort="title">Wie / wat</th>
+            <th data-sort="eggs">Eieren</th>
+            <th data-sort="amount">Bedrag</th>
+            <th>Extra info</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div id="emptyState" class="empty" style="display:none">Niets gevonden met dit filter.</div>
+    </section>
+
+    <section id="tab-klanten" class="tabpane" style="display:none">
+      <div class="toolbar">
+        <input type="text" id="custSearch" placeholder="Zoek op naam of straat…" />
+        <select id="custStatusFilter">
+          <option value="">Alle statussen</option>
+          <option value="klant">Klant</option>
+          <option value="kans">Kans</option>
+          <option value="geen_interesse">Geen interesse</option>
+        </select>
+        <button class="btn" style="background:var(--yolk);color:#fff" id="newCustBtn">+ Nieuwe klant</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="cname">Naam</th>
+            <th data-sort="cstreet">Adres</th>
+            <th>Telefoon</th>
+            <th>Status</th>
+            <th>Vakantie</th>
+          </tr>
+        </thead>
+        <tbody id="custTbody"></tbody>
+      </table>
+      <div id="custEmpty" class="empty" style="display:none">Geen klanten gevonden.</div>
+    </section>
+
+    <section id="tab-looproute" class="tabpane" style="display:none">
+      <div class="toolbar">
+        <input type="text" id="routeSearch" placeholder="Zoek adres in de route…" />
+        <span style="font-size:12.5px;color:var(--soft)">Wijzigingen worden direct opgeslagen.</span>
+      </div>
+      <div id="routeList"></div>
+    </section>
+
+    <section id="tab-stats" class="tabpane" style="display:none">
+      <div class="toolbar">
+        <select id="statsPeriod">
+          <option value="week">Deze week</option>
+          <option value="maand">Deze maand</option>
+          <option value="jaar">Dit jaar</option>
+          <option value="totaal">Totaal</option>
+        </select>
+      </div>
+      <div class="stats" id="statsMainRow"></div>
+      <div class="stats" id="statsEarnRow"></div>
+      <h3 style="margin:20px 0 8px">Omzet per week (laatste 8 weken)</h3>
+      <div id="weekChart" style="display:flex;align-items:flex-end;gap:6px;height:140px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px"></div>
+      <h3 style="margin:20px 0 8px">Top 5 klanten op omzet</h3>
+      <table>
+        <thead><tr><th>#</th><th>Klant</th><th>Omzet</th><th>Eieren</th></tr></thead>
+        <tbody id="topTbody"></tbody>
+      </table>
+    </section>
+
+  </div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="panel" id="panelContent"></div>
+</div>
+
+<script>
+const FN = "/.netlify/functions/data";
+
+// ---------------------------------------------------------------------------
+// Voorbereid op de toekomst: zodra de app meerdere gebruikers/medewerkers
+// ondersteunt, wordt elke datasleutel per gebruiker opgeslagen (bijv.
+// "u_123:customers" i.p.v. "customers"). Verander dan alleen DATA_PREFIX
+// (of maak 'm afhankelijk van een login) — de rest van deze pagina werkt
+// dan automatisch mee, zonder verdere aanpassingen.
+// ---------------------------------------------------------------------------
+const DATA_PREFIX = ""; // bijv. later: `u_${huidigeGebruikerId}:`
+
+async function loadKey(key) {
+  const res = await fetch(`${FN}?key=${encodeURIComponent(DATA_PREFIX + key)}`);
+  if (!res.ok) throw new Error("kon " + key + " niet laden");
+  const data = await res.json();
+  return data.value ?? [];
+}
+async function saveKey(key, value) {
+  const res = await fetch(FN, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: DATA_PREFIX + key, value }),
+  });
+  if (!res.ok) throw new Error("opslaan van " + key + " is mislukt");
+}
+
+let state = { customers: [], sales: [], purchases: [], writeoffs: [], extras: [], settings: {} };
+let sortKey = "ts", sortDir = -1;
+let activeTab = "boekingen";
+
+document.querySelectorAll(".tabbtn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll(".tabbtn").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".tabpane").forEach((p) => p.style.display = "none");
+    document.getElementById("tab-" + activeTab).style.display = "block";
+    if (activeTab === "klanten") renderCustomers();
+    if (activeTab === "looproute") renderRoute();
+    if (activeTab === "stats") renderStats();
+  });
+});
+
+function fmtDate(ts) {
+  return new Date(ts).toLocaleString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function fmtEuro(n) {
+  return "€ " + (n || 0).toFixed(2).replace(".", ",");
+}
+function custName(c) {
+  if (!c) return "";
+  return c.name || `${c.street || ""} ${c.houseNumber || ""}${c.addition ? "-" + c.addition : ""}`.trim();
+}
+
+function buildRows() {
+  const byId = Object.fromEntries(state.customers.map((c) => [c.id, c]));
+  const rows = [];
+  state.sales.forEach((s) => rows.push({
+    kind: "sale", typeLabel: "Verkoop", id: s.id, ts: s.ts,
+    title: s.customerLabel || (byId[s.customerId] ? custName(byId[s.customerId]) : "Losse verkoop"),
+    eggs: s.eggCount, amount: s.amount, extra: s.tip > 0 ? `+${fmtEuro(s.tip)} fooi` : "", raw: s,
+  }));
+  state.purchases.forEach((p) => rows.push({
+    kind: "purchase", typeLabel: "Inkoop", id: p.id, ts: p.ts,
+    title: "Inkoop bij Egg-sellent", eggs: p.eggCount, amount: p.cost || 0,
+    extra: p.cost > 0 ? "kosten" : "", raw: p,
+  }));
+  state.writeoffs.forEach((w) => rows.push({
+    kind: "writeoff", typeLabel: "Afboeking", id: w.id, ts: w.ts,
+    title: w.woType === "niet_geleverd" ? "Niet geleverd" : "Beschadigd",
+    eggs: -w.eggCount, amount: 0,
+    extra: `${w.cause === "egg-sellent" ? "Egg-sellent" : "eigen schuld"}${w.cause === "egg-sellent" ? (w.reported ? " · gemeld" : " · nog niet gemeld") : ""}${w.note ? " · " + w.note : ""}`,
+    raw: w,
+  }));
+  state.extras.forEach((e) => rows.push({
+    kind: "extra", typeLabel: "Extra actie", id: e.id, ts: e.ts,
+    title: e.naam, eggs: null, amount: e.bedrag, extra: `${e.aantal}x`, raw: e,
+  }));
+  return rows;
+}
+
+function applyFiltersAndSort(rows) {
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const type = document.getElementById("typeFilter").value;
+  const from = document.getElementById("dateFrom").value;
+  const to = document.getElementById("dateTo").value;
+  let out = rows.filter((r) => {
+    if (type && r.kind !== type) return false;
+    if (q) {
+      const hay = `${r.title} ${r.extra}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (from && r.ts < new Date(from).getTime()) return false;
+    if (to && r.ts > new Date(to).getTime() + 24 * 3600 * 1000) return false;
+    return true;
+  });
+  out.sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (av === bv) return 0;
+    if (av === null || av === undefined) return 1;
+    if (bv === null || bv === undefined) return -1;
+    return av > bv ? sortDir : -sortDir;
+  });
+  return out;
+}
+
+function render() {
+  const rows = applyFiltersAndSort(buildRows());
+  const tbody = document.getElementById("tbody");
+  const empty = document.getElementById("emptyState");
+  tbody.innerHTML = "";
+  empty.style.display = rows.length === 0 ? "block" : "none";
+  rows.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.className = "row";
+    tr.onclick = () => openEdit(r);
+    tr.innerHTML = `
+      <td>${fmtDate(r.ts)}</td>
+      <td><span class="badge b-${r.kind}">${r.typeLabel}</span></td>
+      <td>${escapeHtml(r.title)}</td>
+      <td>${r.eggs === null ? "—" : r.eggs}</td>
+      <td class="${r.kind === "purchase" ? "amount-pos" : "amount-neg"}">${fmtEuro(r.amount)}</td>
+      <td>${escapeHtml(r.extra || "")}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const total = buildRows();
+  document.getElementById("statsRow").innerHTML = `
+    <div class="stat-card"><b>${total.length}</b>totaal boekingen</div>
+    <div class="stat-card"><b>${rows.length}</b>getoond (na filter)</div>
+    <div class="stat-card"><b>${state.customers.length}</b>klanten</div>
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+}
+
+function closeOverlay() {
+  document.getElementById("overlay").classList.remove("show");
+}
+
+function showMsg(text, ok) {
+  const box = document.getElementById("msgBox");
+  box.innerHTML = `<div class="msg ${ok ? "msg-ok" : "msg-err"}">${escapeHtml(text)}</div>`;
+  setTimeout(() => { box.innerHTML = ""; }, 4000);
+}
+
+async function persistArray(kind, updater) {
+  const keyMap = { sale: "sales", purchase: "purchases", writeoff: "writeoffs", extra: "extras" };
+  const key = keyMap[kind];
+  const updated = updater(state[key]);
+  await saveKey(key, updated);
+  state[key] = updated;
+  render();
+}
+
+function openEdit(r) {
+  const panel = document.getElementById("panelContent");
+  let fields = "";
+  if (r.kind === "sale") {
+    fields = `
+      <div class="field"><label>Klant / omschrijving</label><input id="f_label" value="${escapeHtml(r.raw.customerLabel || "")}" /></div>
+      <div class="row2">
+        <div class="field"><label>Aantal eieren</label><input id="f_eggs" type="number" value="${r.raw.eggCount}" /></div>
+        <div class="field"><label>Bedrag (€)</label><input id="f_amount" type="number" step="0.01" value="${r.raw.amount}" /></div>
+      </div>
+      <div class="field"><label>Fooi (€)</label><input id="f_tip" type="number" step="0.01" value="${r.raw.tip || 0}" /></div>
+    `;
+  } else if (r.kind === "purchase") {
+    fields = `
+      <div class="row2">
+        <div class="field"><label>Aantal eieren</label><input id="f_eggs" type="number" value="${r.raw.eggCount}" /></div>
+        <div class="field"><label>Kosten (€)</label><input id="f_amount" type="number" step="0.01" value="${r.raw.cost || 0}" /></div>
+      </div>
+    `;
+  } else if (r.kind === "writeoff") {
+    fields = `
+      <div class="field"><label>Type</label>
+        <select id="f_wotype">
+          <option value="niet_geleverd" ${r.raw.woType === "niet_geleverd" ? "selected" : ""}>Niet geleverd</option>
+          <option value="beschadigd" ${r.raw.woType === "beschadigd" ? "selected" : ""}>Beschadigd</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Aantal eieren</label><input id="f_eggs" type="number" value="${r.raw.eggCount}" /></div>
+        <div class="field"><label>Oorzaak</label>
+          <select id="f_cause">
+            <option value="egg-sellent" ${r.raw.cause === "egg-sellent" ? "selected" : ""}>Egg-sellent</option>
+            <option value="eigen_schuld" ${r.raw.cause === "eigen_schuld" ? "selected" : ""}>Eigen schuld</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Notitie</label><input id="f_note" value="${escapeHtml(r.raw.note || "")}" /></div>
+      <div class="field"><label><input type="checkbox" id="f_reported" ${r.raw.reported ? "checked" : ""} style="width:auto;margin-right:6px" />Gemeld bij Egg-sellent</label></div>
+    `;
+  } else if (r.kind === "extra") {
+    fields = `
+      <div class="field"><label>Omschrijving</label><input id="f_label" value="${escapeHtml(r.raw.naam || "")}" /></div>
+      <div class="row2">
+        <div class="field"><label>Aantal</label><input id="f_eggs" type="number" value="${r.raw.aantal}" /></div>
+        <div class="field"><label>Bedrag (€)</label><input id="f_amount" type="number" step="0.01" value="${r.raw.bedrag || 0}" /></div>
+      </div>
+    `;
+  }
+
+  panel.innerHTML = `
+    <h2>${r.typeLabel} bewerken</h2>
+    <div class="field"><label>Datum/tijd</label><input id="f_ts" type="datetime-local" value="${toLocalInputValue(r.ts)}" /></div>
+    ${fields}
+    <button class="btn btn-primary" id="saveBtn">Wijzigingen opslaan</button>
+    <button class="btn btn-danger" id="delBtn">Verwijderen</button>
+    <button class="btn btn-ghost" id="cancelBtn">Annuleren</button>
+  `;
+  document.getElementById("overlay").classList.add("show");
+  document.getElementById("cancelBtn").onclick = closeOverlay;
+
+  document.getElementById("saveBtn").onclick = async () => {
+    const ts = new Date(document.getElementById("f_ts").value).getTime();
+    try {
+      if (r.kind === "sale") {
+        await persistArray("sale", (arr) => arr.map((x) => x.id === r.id ? {
+          ...x, ts,
+          customerLabel: document.getElementById("f_label").value,
+          eggCount: parseInt(document.getElementById("f_eggs").value) || 0,
+          amount: parseFloat(document.getElementById("f_amount").value) || 0,
+          tip: parseFloat(document.getElementById("f_tip").value) || 0,
+        } : x));
+      } else if (r.kind === "purchase") {
+        await persistArray("purchase", (arr) => arr.map((x) => x.id === r.id ? {
+          ...x, ts,
+          eggCount: parseInt(document.getElementById("f_eggs").value) || 0,
+          cost: parseFloat(document.getElementById("f_amount").value) || 0,
+        } : x));
+      } else if (r.kind === "writeoff") {
+        await persistArray("writeoff", (arr) => arr.map((x) => x.id === r.id ? {
+          ...x, ts,
+          woType: document.getElementById("f_wotype").value,
+          eggCount: parseInt(document.getElementById("f_eggs").value) || 0,
+          cause: document.getElementById("f_cause").value,
+          note: document.getElementById("f_note").value,
+          reported: document.getElementById("f_reported").checked,
+        } : x));
+      } else if (r.kind === "extra") {
+        await persistArray("extra", (arr) => arr.map((x) => x.id === r.id ? {
+          ...x, ts,
+          naam: document.getElementById("f_label").value,
+          aantal: parseInt(document.getElementById("f_eggs").value) || 0,
+          bedrag: parseFloat(document.getElementById("f_amount").value) || 0,
+        } : x));
+      }
+      closeOverlay();
+      showMsg("Boeking bijgewerkt.", true);
+    } catch (e) {
+      showMsg("Opslaan mislukt: " + e.message, false);
+    }
+  };
+
+  document.getElementById("delBtn").onclick = async () => {
+    if (!confirm("Deze boeking definitief verwijderen?")) return;
+    try {
+      await persistArray(r.kind, (arr) => arr.filter((x) => x.id !== r.id));
+      closeOverlay();
+      showMsg("Boeking verwijderd.", true);
+    } catch (e) {
+      showMsg("Verwijderen mislukt: " + e.message, false);
+    }
+  };
+}
+
+function toLocalInputValue(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+document.getElementById("search").addEventListener("input", render);
+document.getElementById("typeFilter").addEventListener("change", render);
+document.getElementById("dateFrom").addEventListener("change", render);
+document.getElementById("dateTo").addEventListener("change", render);
+document.getElementById("clearFilters").addEventListener("click", () => {
+  document.getElementById("search").value = "";
+  document.getElementById("typeFilter").value = "";
+  document.getElementById("dateFrom").value = "";
+  document.getElementById("dateTo").value = "";
+  render();
+});
+document.querySelectorAll("th[data-sort]").forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.sort;
+    if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = -1; }
+    render();
+  });
+});
+document.getElementById("overlay").addEventListener("click", (e) => {
+  if (e.target.id === "overlay") closeOverlay();
+});
+
+// ---------------------------------------------------------------------------
+// Klanten
+// ---------------------------------------------------------------------------
+function renderCustomers() {
+  const q = document.getElementById("custSearch").value.trim().toLowerCase();
+  const statusFilter = document.getElementById("custStatusFilter").value;
+  let list = state.customers.map((c) => ({
+    ...c,
+    cname: custName(c),
+    cstreet: `${c.street || ""} ${c.houseNumber || ""}`,
+  }));
+  list = list.filter((c) => {
+    if (statusFilter && (c.status || "klant") !== statusFilter) return false;
+    if (q && !(`${c.cname} ${c.cstreet} ${c.city || ""}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  list.sort((a, b) => a.cname.localeCompare(b.cname));
+
+  const tbody = document.getElementById("custTbody");
+  tbody.innerHTML = "";
+  document.getElementById("custEmpty").style.display = list.length === 0 ? "block" : "none";
+  const statusLabel = { klant: "Klant", kans: "Kans", geen_interesse: "Geen interesse" };
+  list.forEach((c) => {
+    const onVacation = isOnVacation(c);
+    const tr = document.createElement("tr");
+    tr.className = "row";
+    tr.onclick = () => openCustomerEdit(c);
+    tr.innerHTML = `
+      <td>${escapeHtml(c.cname)}</td>
+      <td>${escapeHtml(c.cstreet)}${c.addition ? "-" + escapeHtml(c.addition) : ""}, ${escapeHtml(c.postalCode || "")} ${escapeHtml(c.city || "")}</td>
+      <td>${escapeHtml(c.phone || "—")}</td>
+      <td><span class="badge b-extra">${statusLabel[c.status] || "Klant"}</span></td>
+      <td>${onVacation ? `<span class="badge b-writeoff">tot ${new Date(c.vacationEnd).toLocaleDateString("nl-NL")}</span>` : ""}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function isOnVacation(c) {
+  if (!c.vacationStart || !c.vacationEnd) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return today >= c.vacationStart && today <= c.vacationEnd;
+}
+
+document.getElementById("custSearch").addEventListener("input", renderCustomers);
+document.getElementById("custStatusFilter").addEventListener("change", renderCustomers);
+document.getElementById("newCustBtn").addEventListener("click", () => openCustomerEdit(null));
+
+function openCustomerEdit(c) {
+  const panel = document.getElementById("panelContent");
+  const isNew = !c;
+  c = c || { id: null, name: "", postalCode: "", houseNumber: "", addition: "", street: "", city: "", phone: "", status: "klant", vacationStart: "", vacationEnd: "" };
+  panel.innerHTML = `
+    <h2>${isNew ? "Nieuwe klant" : "Klant bewerken"}</h2>
+    <div class="field"><label>Naam (optioneel)</label><input id="cf_name" value="${escapeHtml(c.name || "")}" /></div>
+    <div class="row2">
+      <div class="field"><label>Postcode</label><input id="cf_pc" value="${escapeHtml(c.postalCode || "")}" /></div>
+      <div class="field"><label>Huisnr.</label><input id="cf_nr" value="${escapeHtml(c.houseNumber || "")}" /></div>
+      <div class="field"><label>Toev.</label><input id="cf_add" value="${escapeHtml(c.addition || "")}" /></div>
+    </div>
+    <div class="field"><label>Straat</label><input id="cf_street" value="${escapeHtml(c.street || "")}" /></div>
+    <div class="field"><label>Plaats</label><input id="cf_city" value="${escapeHtml(c.city || "")}" /></div>
+    <div class="field"><label>Telefoon</label><input id="cf_phone" value="${escapeHtml(c.phone || "")}" /></div>
+    <div class="field"><label>Status</label>
+      <select id="cf_status">
+        <option value="klant" ${c.status === "klant" || !c.status ? "selected" : ""}>Klant</option>
+        <option value="kans" ${c.status === "kans" ? "selected" : ""}>Kans</option>
+        <option value="geen_interesse" ${c.status === "geen_interesse" ? "selected" : ""}>Geen interesse</option>
+      </select>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Vakantie van</label><input id="cf_vstart" type="date" value="${c.vacationStart || ""}" /></div>
+      <div class="field"><label>Vakantie tot</label><input id="cf_vend" type="date" value="${c.vacationEnd || ""}" /></div>
+    </div>
+    <button class="btn btn-primary" id="custSaveBtn">Opslaan</button>
+    ${!isNew ? '<button class="btn btn-danger" id="custDelBtn">Verwijderen</button>' : ""}
+    <button class="btn btn-ghost" id="custCancelBtn">Annuleren</button>
+  `;
+  document.getElementById("overlay").classList.add("show");
+  document.getElementById("custCancelBtn").onclick = closeOverlay;
+
+  document.getElementById("custSaveBtn").onclick = async () => {
+    const updated = {
+      id: isNew ? "c_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8) : c.id,
+      name: document.getElementById("cf_name").value.trim(),
+      postalCode: document.getElementById("cf_pc").value.trim(),
+      houseNumber: document.getElementById("cf_nr").value.trim(),
+      addition: document.getElementById("cf_add").value.trim(),
+      street: document.getElementById("cf_street").value.trim(),
+      city: document.getElementById("cf_city").value.trim(),
+      phone: document.getElementById("cf_phone").value.trim(),
+      status: document.getElementById("cf_status").value,
+      vacationStart: document.getElementById("cf_vstart").value,
+      vacationEnd: document.getElementById("cf_vend").value,
+      routeOrder: isNew ? state.customers.length : c.routeOrder,
+      rhythm: c.rhythm, avgEggs: c.avgEggs, histLastPurchase: c.histLastPurchase,
+    };
+    if (!updated.street && !updated.name) { showMsg("Vul minimaal een naam of straat in.", false); return; }
+    try {
+      const newList = isNew ? [...state.customers, updated] : state.customers.map((x) => x.id === c.id ? updated : x);
+      await saveKey("customers", newList);
+      state.customers = newList;
+      closeOverlay();
+      showMsg("Klant opgeslagen.", true);
+      renderCustomers();
+    } catch (e) { showMsg("Opslaan mislukt: " + e.message, false); }
+  };
+
+  if (!isNew) {
+    document.getElementById("custDelBtn").onclick = async () => {
+      if (!confirm("Deze klant definitief verwijderen?")) return;
+      try {
+        const newList = state.customers.filter((x) => x.id !== c.id);
+        await saveKey("customers", newList);
+        state.customers = newList;
+        closeOverlay();
+        showMsg("Klant verwijderd.", true);
+        renderCustomers();
+      } catch (e) { showMsg("Verwijderen mislukt: " + e.message, false); }
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Looproute
+// ---------------------------------------------------------------------------
+function renderRoute() {
+  const q = document.getElementById("routeSearch").value.trim().toLowerCase();
+  const order = state.customers
+    .filter((c) => c.status !== "geen_interesse")
+    .sort((a, b) => (a.routeOrder ?? 9999) - (b.routeOrder ?? 9999));
+
+  const visible = order
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => !q || `${custName(c)} ${c.street} ${c.houseNumber}`.toLowerCase().includes(q));
+
+  const el = document.getElementById("routeList");
+  el.innerHTML = "";
+  if (visible.length === 0) {
+    el.innerHTML = '<div class="empty">Niets gevonden.</div>';
+    return;
+  }
+  visible.forEach(({ c, i }, visIdx) => {
+    const div = document.createElement("div");
+    div.className = "route-row";
+    div.innerHTML = `
+      <div class="route-num">${i + 1}</div>
+      <div class="route-title">
+        <div class="name">${escapeHtml(custName(c))}</div>
+        <div class="addr">${escapeHtml(c.street || "")} ${escapeHtml(c.houseNumber || "")}${c.addition ? "-" + escapeHtml(c.addition) : ""}</div>
+      </div>
+      <button class="route-btn" data-act="up" ${visIdx === 0 ? "disabled" : ""}>↑</button>
+      <button class="route-btn" data-act="down" ${visIdx === visible.length - 1 ? "disabled" : ""}>↓</button>
+      <button class="route-btn" data-act="top">Bovenaan</button>
+      <button class="route-btn" data-act="bottom">Onderaan</button>
+    `;
+    div.querySelector('[data-act="up"]').onclick = () => moveRoute(visible, visIdx, -1);
+    div.querySelector('[data-act="down"]').onclick = () => moveRoute(visible, visIdx, 1);
+    div.querySelector('[data-act="top"]').onclick = () => moveRouteEdge(i, "top");
+    div.querySelector('[data-act="bottom"]').onclick = () => moveRouteEdge(i, "bottom");
+    el.appendChild(div);
+  });
+}
+
+async function moveRoute(visible, visIdx, dir) {
+  const targetVisIdx = visIdx + dir;
+  if (targetVisIdx < 0 || targetVisIdx >= visible.length) return;
+  const globalA = visible[visIdx].i;
+  const globalB = visible[targetVisIdx].i;
+  const order = state.customers.filter((c) => c.status !== "geen_interesse")
+    .sort((a, b) => (a.routeOrder ?? 9999) - (b.routeOrder ?? 9999));
+  [order[globalA], order[globalB]] = [order[globalB], order[globalA]];
+  await saveRouteOrder(order);
+}
+
+async function moveRouteEdge(globalIdx, edge) {
+  const order = state.customers.filter((c) => c.status !== "geen_interesse")
+    .sort((a, b) => (a.routeOrder ?? 9999) - (b.routeOrder ?? 9999));
+  const [item] = order.splice(globalIdx, 1);
+  if (edge === "top") order.unshift(item); else order.push(item);
+  await saveRouteOrder(order);
+}
+
+async function saveRouteOrder(order) {
+  const positions = Object.fromEntries(order.map((c, i) => [c.id, i]));
+  const newCustomers = state.customers.map((c) =>
+    positions[c.id] !== undefined ? { ...c, routeOrder: positions[c.id] } : c
+  );
+  try {
+    await saveKey("customers", newCustomers);
+    state.customers = newCustomers;
+    renderRoute();
+  } catch (e) { showMsg("Opslaan van looproute mislukt: " + e.message, false); }
+}
+
+document.getElementById("routeSearch").addEventListener("input", renderRoute);
+
+// ---------------------------------------------------------------------------
+// Stats
+// ---------------------------------------------------------------------------
+function getWeekBounds(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(d.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { start: monday, end: sunday };
+}
+function getWeekKey(ts) {
+  return getWeekBounds(new Date(ts)).start.toISOString().slice(0, 10);
+}
+function calcWeeklyEarnings(eggCount) {
+  if (!eggCount || eggCount <= 0) return 0;
+  let earnings = 0, remaining = eggCount;
+  const firstBracket = Math.min(remaining, 500);
+  earnings += firstBracket * 0.045;
+  remaining -= firstBracket;
+  let k = 0;
+  while (remaining > 0) {
+    const rate = 0.045 + 0.001 * (k + 1);
+    const amountInBracket = Math.min(remaining, 100);
+    earnings += amountInBracket * rate;
+    remaining -= amountInBracket;
+    k++;
+  }
+  return earnings;
+}
+
+function renderStats() {
+  const period = document.getElementById("statsPeriod").value;
+  const now = new Date();
+  const periodStart = {
+    week: getWeekBounds(now).start.getTime(),
+    maand: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
+    jaar: new Date(now.getFullYear(), 0, 1).getTime(),
+    totaal: 0,
+  }[period];
+
+  const salesInPeriod = state.sales.filter((s) => s.ts >= periodStart);
+  const revenue = salesInPeriod.reduce((s, x) => s + x.amount, 0);
+  const eggsSold = salesInPeriod.reduce((s, x) => s + x.eggCount, 0);
+  const purchasesInPeriod = state.purchases.filter((p) => p.ts >= periodStart);
+  const eggsBought = purchasesInPeriod.reduce((s, x) => s + x.eggCount, 0);
+  const tips = salesInPeriod.reduce((s, x) => s + (x.tip || 0), 0);
+  const writeoffTotal = state.writeoffs.reduce((s, x) => s + x.eggCount, 0);
+  const unreported = state.writeoffs.filter((w) => w.cause === "egg-sellent" && !w.reported).length;
+
+  document.getElementById("statsMainRow").innerHTML = `
+    <div class="stat-card"><b>${fmtEuro(revenue)}</b>omzet eieren</div>
+    <div class="stat-card"><b>${eggsSold}</b>eieren verkocht</div>
+    <div class="stat-card"><b>${eggsBought}</b>eieren ingekocht</div>
+    <div class="stat-card"><b>${fmtEuro(tips)}</b>fooi</div>
+    <div class="stat-card" style="${unreported > 0 ? "border-color:var(--danger)" : ""}"><b>${writeoffTotal}</b>afgeboekt (${unreported} nog te melden)</div>
+  `;
+
+  // verdiensten via weekstaffel, per kalenderweek
+  const eggsByWeek = {};
+  state.sales.forEach((s) => {
+    const key = getWeekKey(s.ts);
+    eggsByWeek[key] = (eggsByWeek[key] || 0) + s.eggCount;
+  });
+  const thisWeekKey = getWeekBounds(now).start.toISOString().slice(0, 10);
+  const lastWeekKey = getWeekBounds(new Date(now.getTime() - 7 * 24 * 3600 * 1000)).start.toISOString().slice(0, 10);
+  const thisWeekEarn = calcWeeklyEarnings(eggsByWeek[thisWeekKey] || 0);
+  const lastWeekEarn = calcWeeklyEarnings(eggsByWeek[lastWeekKey] || 0);
+  const totalEarn = Object.values(eggsByWeek).reduce((s, eggs) => s + calcWeeklyEarnings(eggs), 0);
+  document.getElementById("statsEarnRow").innerHTML = `
+    <div class="stat-card"><b>${fmtEuro(thisWeekEarn)}</b>verdiend deze week (${eggsByWeek[thisWeekKey] || 0} eieren)</div>
+    <div class="stat-card"><b>${fmtEuro(lastWeekEarn)}</b>verdiend vorige week</div>
+    <div class="stat-card"><b>${fmtEuro(totalEarn)}</b>totaal verdiend</div>
+  `;
+
+  // weekomzet laatste 8 weken (voortschrijdend, voor de trend)
+  const weeks = [];
+  for (let i = 7; i >= 0; i--) {
+    const end = now.getTime() - i * 7 * 24 * 3600 * 1000;
+    const start = end - 7 * 24 * 3600 * 1000;
+    const wRevenue = state.sales.filter((s) => s.ts >= start && s.ts < end).reduce((s, x) => s + x.amount, 0);
+    weeks.push({ label: i === 0 ? "Nu" : `-${i}w`, revenue: wRevenue });
+  }
+  const maxWeek = Math.max(1, ...weeks.map((w) => w.revenue));
+  document.getElementById("weekChart").innerHTML = weeks.map((w) => `
+    <div class="weekbar">
+      <div class="bar" style="height:${Math.max(2, (w.revenue / maxWeek) * 100)}px" title="${fmtEuro(w.revenue)}"></div>
+      <div class="lbl">${w.label}</div>
+    </div>
+  `).join("");
+
+  // top 5 klanten op omzet (all-time)
+  const revenueByCustomer = {}, eggsByCustomer = {};
+  state.sales.forEach((s) => {
+    if (!s.customerId) return;
+    revenueByCustomer[s.customerId] = (revenueByCustomer[s.customerId] || 0) + s.amount;
+    eggsByCustomer[s.customerId] = (eggsByCustomer[s.customerId] || 0) + s.eggCount;
+  });
+  const byId = Object.fromEntries(state.customers.map((c) => [c.id, c]));
+  const top5 = Object.entries(revenueByCustomer)
+    .map(([id, amount]) => ({ c: byId[id], amount, eggs: eggsByCustomer[id] || 0 }))
+    .filter((x) => x.c)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5);
+  document.getElementById("topTbody").innerHTML = top5.map((x, i) => `
+    <tr><td>${i + 1}</td><td>${escapeHtml(custName(x.c))}</td><td>${fmtEuro(x.amount)}</td><td>${x.eggs}</td></tr>
+  `).join("") || '<tr><td colspan="4" style="color:var(--soft)">Nog geen verkopen.</td></tr>';
+}
+
+document.getElementById("statsPeriod").addEventListener("change", renderStats);
+
+(async function init() {
+  try {
+    const [customers, sales, purchases, writeoffs, extras] = await Promise.all([
+      loadKey("customers"), loadKey("sales"), loadKey("purchases"), loadKey("writeoffs"), loadKey("extras"),
+    ]);
+    state = { customers, sales, purchases, writeoffs, extras };
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("content").style.display = "block";
+    render();
+  } catch (e) {
+    document.getElementById("loading").innerHTML = "Kon de data niet laden: " + escapeHtml(e.message);
+  }
+})();
+</script>
+</body>
+</html>
