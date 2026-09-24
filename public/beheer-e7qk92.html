@@ -151,6 +151,7 @@
         <input type="date" id="dateFrom" title="Van datum" />
         <input type="date" id="dateTo" title="Tot datum" />
         <button class="btn" style="background:var(--line)" id="clearFilters">Wis filters</button>
+        <button class="btn" style="background:var(--yolk);color:#fff" id="newBookingBtn">+ Nieuwe boeking</button>
       </div>
       <table>
         <thead>
@@ -386,6 +387,152 @@ async function persistArray(kind, updater) {
   state[key] = updated;
   render();
 }
+
+function newBookingFieldsHtml(type) {
+  if (type === "sale") {
+    const options = state.customers
+      .slice()
+      .sort((a, b) => custName(a).localeCompare(custName(b)))
+      .map((c) => `<option value="${c.id}">${escapeHtml(custName(c))}</option>`)
+      .join("");
+    return `
+      <div class="field"><label>Klant</label>
+        <select id="f_customerId">
+          <option value="">— Losse verkoop (geen vaste klant) —</option>
+          ${options}
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Aantal eieren</label><input id="f_eggs" type="number" value="6" /></div>
+        <div class="field"><label>Bedrag (€)</label><input id="f_amount" type="number" step="0.01" value="0" /></div>
+      </div>
+      <div class="field"><label>Fooi (€)</label><input id="f_tip" type="number" step="0.01" value="0" /></div>
+    `;
+  }
+  if (type === "purchase") {
+    return `
+      <div class="row2">
+        <div class="field"><label>Aantal eieren</label><input id="f_eggs" type="number" value="0" /></div>
+        <div class="field"><label>Kosten (€)</label><input id="f_amount" type="number" step="0.01" value="0" /></div>
+      </div>
+    `;
+  }
+  if (type === "writeoff") {
+    return `
+      <div class="field"><label>Type</label>
+        <select id="f_wotype">
+          <option value="niet_geleverd">Niet geleverd</option>
+          <option value="beschadigd">Beschadigd</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Aantal eieren</label><input id="f_eggs" type="number" value="0" /></div>
+        <div class="field"><label>Oorzaak</label>
+          <select id="f_cause">
+            <option value="egg-sellent">Egg-sellent</option>
+            <option value="eigen_schuld">Eigen schuld</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Notitie</label><input id="f_note" value="" /></div>
+      <div class="field"><label><input type="checkbox" id="f_reported" style="width:auto;margin-right:6px" />Gemeld bij Egg-sellent</label></div>
+    `;
+  }
+  // extra
+  return `
+    <div class="field"><label>Omschrijving</label><input id="f_label" value="" placeholder="bijv. Stroopwafelactie" /></div>
+    <div class="row2">
+      <div class="field"><label>Aantal</label><input id="f_eggs" type="number" value="1" /></div>
+      <div class="field"><label>Bedrag (€)</label><input id="f_amount" type="number" step="0.01" value="0" /></div>
+    </div>
+  `;
+}
+
+function openNewBooking(type) {
+  type = type || "sale";
+  const panel = document.getElementById("panelContent");
+  panel.innerHTML = `
+    <h2>Nieuwe boeking</h2>
+    <div class="field"><label>Type</label>
+      <select id="f_type">
+        <option value="sale" ${type === "sale" ? "selected" : ""}>Verkoop</option>
+        <option value="purchase" ${type === "purchase" ? "selected" : ""}>Inkoop</option>
+        <option value="writeoff" ${type === "writeoff" ? "selected" : ""}>Afboeking</option>
+        <option value="extra" ${type === "extra" ? "selected" : ""}>Extra actie</option>
+      </select>
+    </div>
+    <div class="field"><label>Datum/tijd</label><input id="f_ts" type="datetime-local" value="${toLocalInputValue(Date.now())}" /></div>
+    <div id="dynFields">${newBookingFieldsHtml(type)}</div>
+    <button class="btn btn-primary" id="newSaveBtn">Boeking toevoegen</button>
+    <button class="btn btn-ghost" id="newCancelBtn">Annuleren</button>
+  `;
+  document.getElementById("overlay").classList.add("show");
+  document.getElementById("newCancelBtn").onclick = closeOverlay;
+  document.getElementById("f_type").onchange = (e) => openNewBooking(e.target.value);
+
+  document.getElementById("newSaveBtn").onclick = async () => {
+    const ts = new Date(document.getElementById("f_ts").value).getTime();
+    const t = document.getElementById("f_type").value;
+    try {
+      if (t === "sale") {
+        const customerId = document.getElementById("f_customerId").value || null;
+        const cust = customerId ? state.customers.find((c) => c.id === customerId) : null;
+        const rec = {
+          id: "s_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+          ts, customerId,
+          customerLabel: cust ? custName(cust) : "Losse verkoop",
+          eggCount: parseInt(document.getElementById("f_eggs").value) || 0,
+          amount: parseFloat(document.getElementById("f_amount").value) || 0,
+          tip: parseFloat(document.getElementById("f_tip").value) || 0,
+        };
+        const newArr = [...state.sales, rec];
+        await saveKey("sales", newArr);
+        state.sales = newArr;
+      } else if (t === "purchase") {
+        const rec = {
+          id: "p_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+          ts,
+          eggCount: parseInt(document.getElementById("f_eggs").value) || 0,
+          cost: parseFloat(document.getElementById("f_amount").value) || 0,
+        };
+        const newArr = [...state.purchases, rec];
+        await saveKey("purchases", newArr);
+        state.purchases = newArr;
+      } else if (t === "writeoff") {
+        const rec = {
+          id: "w_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+          ts,
+          woType: document.getElementById("f_wotype").value,
+          eggCount: parseInt(document.getElementById("f_eggs").value) || 0,
+          cause: document.getElementById("f_cause").value,
+          note: document.getElementById("f_note").value,
+          reported: document.getElementById("f_reported").checked,
+        };
+        const newArr = [...state.writeoffs, rec];
+        await saveKey("writeoffs", newArr);
+        state.writeoffs = newArr;
+      } else {
+        const rec = {
+          id: "e_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+          ts,
+          naam: document.getElementById("f_label").value,
+          aantal: parseInt(document.getElementById("f_eggs").value) || 0,
+          bedrag: parseFloat(document.getElementById("f_amount").value) || 0,
+        };
+        const newArr = [...state.extras, rec];
+        await saveKey("extras", newArr);
+        state.extras = newArr;
+      }
+      closeOverlay();
+      showMsg("Boeking toegevoegd.", true);
+      render();
+    } catch (e) {
+      showMsg("Opslaan mislukt: " + e.message, false);
+    }
+  };
+}
+
+document.getElementById("newBookingBtn").addEventListener("click", () => openNewBooking("sale"));
 
 function openEdit(r) {
   const panel = document.getElementById("panelContent");
